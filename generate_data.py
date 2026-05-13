@@ -1674,6 +1674,219 @@ def generate_economic_timeseries(fig, ax):
     ax.set_xlabel('Year'); ax.set_ylabel('GDP Index'); ax.legend()
     return [{"type":"economic_ts","n_series":3}]
 
+def generate_bubble_chart(fig, ax):
+    n = random.randint(15, 50)
+    x = np.random.uniform(0, 100, n); y = np.random.uniform(0, 100, n)
+    sizes = np.random.uniform(20, 500, n)
+    colors = np.random.uniform(0, 1, n)
+    sc = ax.scatter(x, y, s=sizes, c=colors, cmap='viridis', alpha=0.6, edgecolors='k')
+    plt.colorbar(sc, ax=ax, label='Category Score')
+    ax.set_xlabel('GDP per capita'); ax.set_ylabel('Life Expectancy')
+    random_style(ax)
+    return [{"type": "bubble", "x": round(float(xi),1), "y": round(float(yi),1), "size": round(float(si),1)} for xi,yi,si in zip(x[:5],y[:5],sizes[:5])]
+
+def generate_radar_chart(fig, _):
+    fig.clf(); ax = fig.add_subplot(111, polar=True)
+    cats = ['Strength', 'Speed', 'Agility', 'Endurance', 'Power', 'Flexibility']
+    n = len(cats); angles = np.linspace(0, 2*np.pi, n, endpoint=False).tolist(); angles += angles[:1]
+    gt = []
+    for name, c in zip(['Athlete A', 'Athlete B'], ['blue', 'red']):
+        vals = [random.uniform(3, 10) for _ in cats]; vals += vals[:1]
+        ax.plot(angles, vals, color=c, lw=2, label=name)
+        ax.fill(angles, vals, color=c, alpha=0.15)
+        gt.append({"type": "radar", "name": name, "values": [round(v,1) for v in vals[:-1]]})
+    ax.set_xticks(angles[:-1]); ax.set_xticklabels(cats, fontsize=8)
+    ax.legend(loc='upper right', fontsize=7)
+    return gt
+
+def generate_sankey_flow(fig, ax):
+    # Simplified alluvial/flow using stacked horizontal bars
+    stages = ['Leads', 'Qualified', 'Proposal', 'Won']
+    values = [1000, 600, 300, 120]
+    colors = ['#3182bd', '#6baed6', '#9ecae1', '#c6dbef']
+    y = np.arange(len(stages))
+    ax.barh(y, values, color=colors, edgecolor='k')
+    for i, (s, v) in enumerate(zip(stages, values)):
+        ax.text(v/2, i, f'{s}\n{v}', ha='center', va='center', fontweight='bold')
+    ax.set_yticks([]); ax.set_xlabel('Count')
+    ax.set_title('Conversion Funnel')
+    return [{"type": "sankey", "stage": s, "value": v} for s, v in zip(stages, values)]
+
+def generate_treemap(fig, ax):
+    from matplotlib.patches import Rectangle
+    n = random.randint(6, 12)
+    values = sorted([random.uniform(10, 100) for _ in range(n)], reverse=True)
+    labels = [f"Cat {i}" for i in range(n)]
+    colors = plt.cm.Set3(np.linspace(0, 1, n))
+    total = sum(values); x, y, w = 0, 0, 1
+    h = 1; ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+    for i, (v, l) in enumerate(zip(values, labels)):
+        frac = v / total
+        if i % 2 == 0:
+            rect_w = frac * w / (sum(values[i:]) / total) if sum(values[i:]) > 0 else 0.1
+            rect = Rectangle((x, y), rect_w, h, facecolor=colors[i], edgecolor='k')
+            ax.add_patch(rect)
+            ax.text(x + rect_w/2, y + h/2, f'{l}\n{v:.0f}', ha='center', va='center', fontsize=7)
+            x += rect_w
+        else:
+            rect_h = frac * h / (sum(values[i:]) / total) if sum(values[i:]) > 0 else 0.1
+            rect = Rectangle((x-rect_w if i>0 else x, y), rect_w if i>0 else w-x, rect_h, facecolor=colors[i], edgecolor='k')
+            ax.add_patch(rect); y += rect_h
+    ax.set_xticks([]); ax.set_yticks([])
+    return [{"type": "treemap", "label": l, "value": round(v,1)} for l, v in zip(labels, values)]
+
+def generate_polar_plot(fig, _):
+    fig.clf(); ax = fig.add_subplot(111, polar=True)
+    theta = np.linspace(0, 2*np.pi, 100)
+    for i in range(random.randint(1, 3)):
+        r = 1 + 0.5*np.cos((i+2)*theta) + np.random.normal(0, 0.05, len(theta))
+        ax.plot(theta, r, label=f'Mode {i+1}')
+    ax.legend(fontsize=7)
+    return [{"type": "polar_plot"}]
+
+def generate_area_chart(fig, ax):
+    x = np.arange(50)
+    n_series = random.randint(2, 4)
+    colors = ['#3182bd', '#e6550d', '#31a354', '#756bb1']
+    ys = [np.random.uniform(5, 20, 50).cumsum() * 0.1 for _ in range(n_series)]
+    ax.stackplot(x, *ys, labels=[f'Series {i+1}' for i in range(n_series)], colors=colors[:n_series], alpha=0.7)
+    ax.set_xlabel('Time'); ax.set_ylabel('Value'); ax.legend(loc='upper left', fontsize=7)
+    return [{"type": "stacked_area", "n_series": n_series}]
+
+def generate_funnel_chart(fig, ax):
+    stages = ['Visitors', 'Sign-ups', 'Trial', 'Paid', 'Enterprise']
+    values = sorted([random.randint(100, 10000) for _ in range(5)], reverse=True)
+    y = np.arange(len(stages))
+    colors = plt.cm.Blues(np.linspace(0.3, 0.9, len(stages)))
+    ax.barh(y, values, color=colors, edgecolor='k', height=0.7)
+    for i, (s, v) in enumerate(zip(stages, values)):
+        ax.text(v + max(values)*0.02, i, f'{v}', va='center', fontsize=9)
+    ax.set_yticks(y); ax.set_yticklabels(stages); ax.invert_yaxis()
+    ax.set_xlabel('Count')
+    return [{"type": "funnel", "stage": s, "value": v} for s, v in zip(stages, values)]
+
+def generate_parallel_coordinates(fig, ax):
+    n_vars = random.randint(4, 7); n_samples = 30
+    var_names = [f"Var{i}" for i in range(n_vars)]
+    data = np.random.randn(n_samples, n_vars)
+    # normalize
+    data = (data - data.min(axis=0)) / (data.max(axis=0) - data.min(axis=0))
+    classes = np.random.choice([0, 1, 2], n_samples)
+    colors_pc = ['blue', 'red', 'green']
+    x = np.arange(n_vars)
+    for i in range(n_samples):
+        ax.plot(x, data[i], color=colors_pc[classes[i]], alpha=0.3, lw=1)
+    ax.set_xticks(x); ax.set_xticklabels(var_names, fontsize=8)
+    ax.set_ylabel('Normalized Value')
+    # legend
+    for ci, c in enumerate(colors_pc):
+        ax.plot([], [], color=c, label=f'Class {ci}')
+    ax.legend(fontsize=7)
+    return [{"type": "parallel_coords", "n_vars": n_vars, "n_classes": 3}]
+
+def generate_hexbin_plot(fig, ax):
+    n = 5000
+    x = np.random.normal(0, 1, n); y = x * 0.5 + np.random.normal(0, 1, n)
+    hb = ax.hexbin(x, y, gridsize=25, cmap='YlOrRd', mincnt=1)
+    plt.colorbar(hb, ax=ax, label='Count')
+    ax.set_xlabel('X'); ax.set_ylabel('Y')
+    return [{"type": "hexbin", "n_points": n, "correlation": round(float(np.corrcoef(x,y)[0,1]),3)}]
+
+def generate_candlestick(fig, ax):
+    n = 40
+    dates = np.arange(n)
+    close = 100 + np.cumsum(np.random.normal(0, 2, n))
+    open_p = close + np.random.normal(0, 1, n)
+    high = np.maximum(open_p, close) + np.abs(np.random.normal(0, 1.5, n))
+    low = np.minimum(open_p, close) - np.abs(np.random.normal(0, 1.5, n))
+    for i in range(n):
+        color = 'green' if close[i] >= open_p[i] else 'red'
+        ax.plot([dates[i], dates[i]], [low[i], high[i]], color='k', lw=0.8)
+        ax.bar(dates[i], abs(close[i]-open_p[i]), bottom=min(open_p[i],close[i]), color=color, width=0.6, edgecolor='k', lw=0.5)
+    ax.set_xlabel('Trading Day'); ax.set_ylabel('Price ($)')
+    return [{"type": "candlestick", "final_close": round(float(close[-1]),2)}]
+
+def generate_ternary_diagram(fig, ax):
+    n = 80
+    # Random compositions summing to 1
+    raw = np.random.dirichlet([1,1,1], n)
+    a, b, c = raw[:,0], raw[:,1], raw[:,2]
+    # Convert to Cartesian for plotting in regular axes
+    x = 0.5 * (2*b + c) / (a + b + c)
+    y = (np.sqrt(3)/2) * c / (a + b + c)
+    colors = a  # color by component A fraction
+    sc = ax.scatter(x, y, c=colors, cmap='coolwarm', s=20, alpha=0.7, edgecolors='k', lw=0.3)
+    plt.colorbar(sc, ax=ax, label='Component A')
+    # Draw triangle
+    tri_x = [0, 1, 0.5, 0]; tri_y = [0, 0, np.sqrt(3)/2, 0]
+    ax.plot(tri_x, tri_y, 'k-', lw=2)
+    ax.text(0, -0.05, 'A', ha='center', fontsize=12)
+    ax.text(1, -0.05, 'B', ha='center', fontsize=12)
+    ax.text(0.5, np.sqrt(3)/2+0.03, 'C', ha='center', fontsize=12)
+    ax.set_xlim(-0.1, 1.1); ax.set_ylim(-0.1, 1.0)
+    ax.set_aspect('equal'); ax.set_xticks([]); ax.set_yticks([])
+    return [{"type": "ternary", "n_points": n}]
+
+def generate_swarm_plot(fig, ax):
+    n_groups = random.randint(3, 5)
+    gt = []
+    for i in range(n_groups):
+        data = np.random.normal(random.uniform(20,60), random.uniform(5,12), random.randint(20,50))
+        # jitter x
+        x = np.ones_like(data) * i + np.random.uniform(-0.2, 0.2, len(data))
+        ax.scatter(x, data, s=15, alpha=0.6, color=['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd'][i])
+        gt.append({"type": "swarm", "group": f"Group {i+1}", "mean": round(float(np.mean(data)),2), "n": len(data)})
+    ax.set_xticks(range(n_groups)); ax.set_xticklabels([f"Group {i+1}" for i in range(n_groups)])
+    ax.set_ylabel('Value')
+    return gt
+
+def generate_pair_plot(fig, _):
+    fig.clf()
+    n_vars = 3; n = 100
+    names = ['Var A', 'Var B', 'Var C']
+    data = np.random.randn(n, n_vars)
+    data[:,1] = data[:,0]*0.7 + np.random.randn(n)*0.5  # correlate A and B
+    axes = fig.subplots(n_vars, n_vars)
+    for i in range(n_vars):
+        for j in range(n_vars):
+            ax = axes[i,j]
+            if i == j:
+                ax.hist(data[:,i], bins=15, color='steelblue', alpha=0.7)
+            else:
+                ax.scatter(data[:,j], data[:,i], s=5, alpha=0.5, c='steelblue')
+            if i < n_vars-1: ax.set_xticks([])
+            else: ax.set_xlabel(names[j], fontsize=7)
+            if j > 0: ax.set_yticks([])
+            else: ax.set_ylabel(names[i], fontsize=7)
+    plt.subplots_adjust(wspace=0.05, hspace=0.05)
+    return [{"type": "pair_plot", "n_vars": n_vars}]
+
+def generate_step_histogram(fig, ax):
+    n_dists = random.randint(1, 3)
+    colors = ['blue', 'red', 'green']; gt = []
+    for i in range(n_dists):
+        mu = random.uniform(20, 80); sigma = random.uniform(5, 15)
+        data = np.random.normal(mu, sigma, random.randint(500, 2000))
+        counts, edges = np.histogram(data, bins=random.randint(20, 40))
+        ax.step(edges[:-1], counts, where='post', color=colors[i], lw=1.5, label=f'Process {i+1}')
+        gt.append({"type": "step_hist", "process": f"Process {i+1}", "mean": round(mu,1), "entries": len(data)})
+    if random.random() > 0.5: ax.set_yscale('log')
+    ax.set_xlabel(random.choice([r'$m_{jj}$ [GeV]', 'Energy [keV]', 'ADC counts']))
+    ax.set_ylabel('Events / bin'); ax.legend()
+    return gt
+
+def generate_ecdf(fig, ax):
+    n_dists = random.randint(1, 3)
+    colors = ['blue', 'red', 'green']; gt = []
+    for i in range(n_dists):
+        mu = random.uniform(20, 80); sigma = random.uniform(5, 15)
+        data = np.sort(np.random.normal(mu, sigma, 200))
+        ecdf = np.arange(1, len(data)+1) / len(data)
+        ax.step(data, ecdf, color=colors[i], lw=1.5, label=f'Sample {i+1}')
+        gt.append({"type": "ecdf", "sample": f"Sample {i+1}", "median": round(float(np.median(data)),1)})
+    ax.set_xlabel('Value'); ax.set_ylabel('ECDF'); ax.legend()
+    ax.axhline(0.5, color='gray', ls='--', alpha=0.5)
+    return gt
 
 def generate_plot(output_dir, num_samples):
     os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
@@ -1786,7 +1999,22 @@ def generate_plot(output_dir, num_samples):
         generate_event_study,
         generate_lorenz_curve,
         generate_survey_stacked_bar,
-        generate_economic_timeseries
+        generate_economic_timeseries,
+        generate_bubble_chart,
+        generate_radar_chart,
+        generate_sankey_flow,
+        generate_treemap,
+        generate_polar_plot,
+        generate_area_chart,
+        generate_funnel_chart,
+        generate_parallel_coordinates,
+        generate_hexbin_plot,
+        generate_candlestick,
+        generate_ternary_diagram,
+        generate_swarm_plot,
+        generate_pair_plot,
+        generate_step_histogram,
+        generate_ecdf
     ]
     
     multi_panel_types = {"bode_plot", "corner_plot", "unfolded_xsec", "invariant_mass", "sky_map", "stacked_ratio", "clustered_heatmap", "parity_grid"}
