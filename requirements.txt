@@ -8,3 +8,5 @@ pandas
 tqdm
 scikit-learn
 accelerate
+mplhep
+SciencePlots

@@ -2366,6 +2366,33 @@ def _generate_single_worker(args):
     np.random.seed()
     random.seed()
     
+    # Apply a random plot style to diversify training data
+    style_choice = random.choice([
+        'default', 'default', 'default',  # weight default more
+        'ggplot', 'bmh', 'classic', 'fivethirtyeight',
+        'seaborn-v0_8-darkgrid', 'seaborn-v0_8-whitegrid', 'seaborn-v0_8-ticks',
+        'science_default', 'science_ieee', 'science_nature', 'science_scatter',
+        'hep_cms', 'hep_atlas', 'hep_alice', 'hep_lhcb'
+    ])
+    
+    plt.style.use('default') # reset first
+    if style_choice.startswith('science_'):
+        import scienceplots
+        substyle = style_choice.split('_')[1]
+        if substyle == 'default':
+            plt.style.use(['science', 'no-latex'])
+        else:
+            plt.style.use(['science', substyle, 'no-latex'])
+    elif style_choice.startswith('hep_'):
+        import mplhep as hep
+        exp = style_choice.split('_')[1].upper()
+        if exp == 'CMS': hep.style.use(hep.style.CMS)
+        elif exp == 'ATLAS': hep.style.use(hep.style.ATLAS)
+        elif exp == 'ALICE': hep.style.use(hep.style.ALICE)
+        elif exp == 'LHCB': hep.style.use(hep.style.LHCb)
+    elif style_choice != 'default':
+        plt.style.use(style_choice)
+        
     fig, ax = plt.subplots(figsize=(random.uniform(6.0, 9.0), random.uniform(6.0, 9.0)))
     generator = random.choice(plot_types)
     plot_type_name = generator.__name__.replace('generate_', '')
