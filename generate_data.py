@@ -1,4 +1,5 @@
 import os
+import io
 import json
 import random
 import argparse
@@ -7,6 +8,123 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from scipy.stats import gaussian_kde
 from matplotlib.patches import Ellipse
+from PIL import Image, ImageFilter, ImageEnhance, ImageDraw, ImageFont
+
+
+def degrade_image(image_path):
+    """Apply realistic degradation effects to simulate scanned/old/low-quality plots.
+    Randomly applies 1-3 effects from: blur, noise, JPEG artifacts, yellowing,
+    rotation/skew, low contrast, low resolution, watermark, scanner edge shadow.
+    Returns the degradation description for metadata."""
+    img = Image.open(image_path).convert('RGB')
+    applied = []
+
+    # Pick 1-3 random degradation effects
+    effects = random.sample([
+        'blur', 'noise', 'jpeg_artifact', 'yellowing', 'rotation',
+        'low_contrast', 'low_resolution', 'watermark', 'edge_shadow',
+        'grayscale', 'brightness_shift'
+    ], k=random.randint(1, 3))
+
+    for effect in effects:
+        if effect == 'blur':
+            # Simulate out-of-focus scan or low-quality camera
+            radius = random.uniform(0.5, 2.5)
+            img = img.filter(ImageFilter.GaussianBlur(radius=radius))
+            applied.append(f'blur_r{radius:.1f}')
+
+        elif effect == 'noise':
+            # Gaussian noise simulating old scanner / photocopy
+            arr = np.array(img, dtype=np.float32)
+            noise_level = random.uniform(5, 25)
+            noise = np.random.normal(0, noise_level, arr.shape)
+            arr = np.clip(arr + noise, 0, 255).astype(np.uint8)
+            img = Image.fromarray(arr)
+            applied.append(f'noise_s{noise_level:.0f}')
+
+        elif effect == 'jpeg_artifact':
+            # Heavy JPEG compression artifacts
+            quality = random.randint(8, 35)
+            buffer = io.BytesIO()
+            img.save(buffer, format='JPEG', quality=quality)
+            buffer.seek(0)
+            img = Image.open(buffer).convert('RGB')
+            applied.append(f'jpeg_q{quality}')
+
+        elif effect == 'yellowing':
+            # Simulate aged/yellowed paper
+            arr = np.array(img, dtype=np.float32)
+            yellow_tint = np.array([random.uniform(10, 30), random.uniform(8, 20), -random.uniform(5, 20)])
+            arr += yellow_tint
+            arr = np.clip(arr, 0, 255).astype(np.uint8)
+            img = Image.fromarray(arr)
+            applied.append('yellowing')
+
+        elif effect == 'rotation':
+            # Slight skew from imperfect scan alignment
+            angle = random.uniform(-3, 3)
+            img = img.rotate(angle, resample=Image.BILINEAR, expand=False,
+                           fillcolor=(255, 255, 255))
+            applied.append(f'rot_{angle:.1f}deg')
+
+        elif effect == 'low_contrast':
+            # Faded/washed-out photocopy
+            factor = random.uniform(0.3, 0.7)
+            img = ImageEnhance.Contrast(img).enhance(factor)
+            applied.append(f'contrast_{factor:.2f}')
+
+        elif effect == 'low_resolution':
+            # Simulate low-DPI scan or small embedded image
+            scale = random.uniform(0.25, 0.5)
+            w, h = img.size
+            small = img.resize((int(w*scale), int(h*scale)), Image.BILINEAR)
+            img = small.resize((w, h), Image.NEAREST)  # pixelated upscale
+            applied.append(f'lowres_{scale:.2f}')
+
+        elif effect == 'watermark':
+            # Simulate institutional watermark or "DRAFT" stamp
+            draw = ImageDraw.Draw(img)
+            text = random.choice(['DRAFT', 'PREPRINT', 'CONFIDENTIAL', 'SAMPLE', 'COPY'])
+            w, h = img.size
+            try:
+                font = ImageFont.truetype('/System/Library/Fonts/Helvetica.ttc', size=int(min(w,h)*0.15))
+            except (OSError, IOError):
+                font = ImageFont.load_default()
+            # Semi-transparent diagonal stamp
+            overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
+            overlay_draw = ImageDraw.Draw(overlay)
+            overlay_draw.text((w//4, h//3), text, fill=(200, 200, 200, 80), font=font)
+            overlay = overlay.rotate(random.uniform(-30, -15), expand=False)
+            img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+            applied.append(f'watermark_{text}')
+
+        elif effect == 'edge_shadow':
+            # Simulate scanner edge darkening (vignette)
+            arr = np.array(img, dtype=np.float32)
+            h, w = arr.shape[:2]
+            Y, X = np.ogrid[:h, :w]
+            cx, cy = w/2, h/2
+            dist = np.sqrt((X-cx)**2 + (Y-cy)**2)
+            max_dist = np.sqrt(cx**2 + cy**2)
+            vignette = 1 - 0.4 * (dist / max_dist) ** 2
+            arr *= vignette[:, :, np.newaxis]
+            arr = np.clip(arr, 0, 255).astype(np.uint8)
+            img = Image.fromarray(arr)
+            applied.append('edge_shadow')
+
+        elif effect == 'grayscale':
+            # Old B&W photocopy
+            img = img.convert('L').convert('RGB')
+            applied.append('grayscale')
+
+        elif effect == 'brightness_shift':
+            # Uneven exposure from scanner lamp
+            factor = random.uniform(0.6, 1.4)
+            img = ImageEnhance.Brightness(img).enhance(factor)
+            applied.append(f'brightness_{factor:.2f}')
+
+    img.save(image_path)
+    return applied
 
 def random_style(ax):
     if random.random() > 0.5:
@@ -1888,7 +2006,7 @@ def generate_ecdf(fig, ax):
     ax.axhline(0.5, color='gray', ls='--', alpha=0.5)
     return gt
 
-def generate_plot(output_dir, num_samples):
+def generate_plot(output_dir, num_samples, degrade_fraction=0.3):
     os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
     metadata_path = os.path.join(output_dir, "metadata.jsonl")
     
@@ -2040,8 +2158,18 @@ def generate_plot(output_dir, num_samples):
             plt.savefig(image_path, bbox_inches='tight', dpi=random.randint(80, 150))
             plt.close(fig)
             
+            # Apply degradation to a fraction of images
+            degradation_applied = []
+            if random.random() < degrade_fraction:
+                try:
+                    degradation_applied = degrade_image(image_path)
+                except Exception:
+                    pass  # If degradation fails, keep the clean image
+            
             structured_gt = {
                 "figure_type": "multi_panel" if plot_type_name in multi_panel_types else "single_panel",
+                "image_quality": "degraded" if degradation_applied else "clean",
+                "degradation_effects": degradation_applied,
                 "panels": [
                     {
                         "panel_id": "A",
@@ -2061,7 +2189,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate synthetic scientific plots.")
     parser.add_argument("--output_dir", type=str, default="data", help="Output directory")
     parser.add_argument("--samples", type=int, default=100, help="Number of samples to generate")
+    parser.add_argument("--degrade_fraction", type=float, default=0.3,
+                        help="Fraction of images to degrade (0.0-1.0). Simulates scans, photocopies, aging.")
     args = parser.parse_args()
     
-    generate_plot(args.output_dir, args.samples)
-    print(f"Generated {args.samples} samples covering 107 plot types in {args.output_dir}")
+    generate_plot(args.output_dir, args.samples, args.degrade_fraction)
+    print(f"Generated {args.samples} samples ({args.degrade_fraction*100:.0f}%% degraded) in {args.output_dir}")
