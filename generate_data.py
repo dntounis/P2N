@@ -4,7 +4,10 @@ import json
 import random
 import argparse
 import numpy as np
+import matplotlib
+matplotlib.use('Agg') # Safe for multiprocessing
 import matplotlib.pyplot as plt
+import multiprocessing
 from tqdm import tqdm
 from scipy.stats import gaussian_kde
 from matplotlib.patches import Ellipse
@@ -2341,78 +2344,89 @@ def generate_plot(output_dir, num_samples, degrade_fraction=0.3, aux_tasks=False
     
     multi_panel_types = {"bode_plot", "corner_plot", "unfolded_xsec", "invariant_mass", "sky_map", "stacked_ratio", "clustered_heatmap", "parity_grid"}
     
-    with open(metadata_path, 'w') as f:
-        for i in tqdm(range(num_samples), desc="Generating Complex Data"):
-            fig, ax = plt.subplots(figsize=(random.uniform(6.0, 9.0), random.uniform(6.0, 9.0)))
-            generator = random.choice(plot_types)
-            plot_type_name = generator.__name__.replace('generate_', '')
-            
-            try:
-                data_points = generator(fig, ax)
-            except Exception as e:
-                plt.close(fig)
-                continue
-            
-            # Capture figure metadata for auxiliary tasks before saving
-            try:
-                main_ax = fig.axes[0] if fig.axes else ax
-                fig_meta = capture_fig_meta(fig, main_ax, plot_type_name)
-            except Exception:
-                fig_meta = {"plot_type": plot_type_name}
-            
-            image_dir = os.path.join(output_dir, "images", plot_type_name)
-            os.makedirs(image_dir, exist_ok=True)
-            
-            image_filename = f"image_{i:05d}.png"
-            image_path = os.path.join(image_dir, image_filename)
-            
-            plt.savefig(image_path, bbox_inches='tight', dpi=random.randint(80, 150))
-            plt.close(fig)
-            
-            # Apply degradation to a fraction of images
-            degradation_applied = []
-            if random.random() < degrade_fraction:
-                try:
-                    degradation_applied = degrade_image(image_path)
-                except Exception:
-                    pass  # If degradation fails, keep the clean image
-            
-            structured_gt = {
-                "figure_type": "multi_panel" if plot_type_name in multi_panel_types else "single_panel",
-                "image_quality": "degraded" if degradation_applied else "clean",
-                "degradation_effects": degradation_applied,
-                "panels": [
-                    {
-                        "panel_id": "A",
-                        "plot_type": plot_type_name,
-                        "data_series": data_points
-                    }
-                ]
+    # Define the worker initialization to pass global variables if needed, 
+    # but since it's a Linux fork (usually), globals are inherited. We'll pass explicit args.
+    
+    tasks = [(i, output_dir, degrade_fraction, aux_tasks, plot_types, multi_panel_types) for i in range(num_samples)]
+    
+    num_cores = multiprocessing.cpu_count()
+    print(f"Generating data using {num_cores} CPU cores in parallel...")
+    
+    with open(metadata_path, 'a') as f:
+        with multiprocessing.Pool(processes=num_cores) as pool:
+            for result_lines in tqdm(pool.imap_unordered(_generate_single_worker, tasks), total=num_samples, desc="Generating Complex Data"):
+                for line in result_lines:
+                    f.write(line + "\n")
+
+def _generate_single_worker(args):
+    i, output_dir, degrade_fraction, aux_tasks, plot_types, multi_panel_types = args
+    result_lines = []
+    
+    # Need to set random seed per worker so they don't all generate the same data
+    np.random.seed()
+    random.seed()
+    
+    fig, ax = plt.subplots(figsize=(random.uniform(6.0, 9.0), random.uniform(6.0, 9.0)))
+    generator = random.choice(plot_types)
+    plot_type_name = generator.__name__.replace('generate_', '')
+    
+    try:
+        data_points = generator(fig, ax)
+
+    except Exception as e:
+        plt.close(fig)
+        return []
+    try:
+        main_ax = fig.axes[0] if fig.axes else ax
+        fig_meta = capture_fig_meta(fig, main_ax, plot_type_name)
+    except Exception:
+        fig_meta = {"plot_type": plot_type_name}
+    image_dir = os.path.join(output_dir, "images", plot_type_name)
+    os.makedirs(image_dir, exist_ok=True)
+    image_filename = f"image_{i:05d}.png"
+    image_path = os.path.join(image_dir, image_filename)
+    plt.savefig(image_path, bbox_inches='tight', dpi=random.randint(80, 150))
+    plt.close(fig)
+    degradation_applied = []
+    if random.random() < degrade_fraction:
+        try:
+            degradation_applied = degrade_image(image_path)
+        except Exception:
+            pass
+    structured_gt = {
+        "figure_type": "multi_panel" if plot_type_name in multi_panel_types else "single_panel",
+        "image_quality": "degraded" if degradation_applied else "clean",
+        "degradation_effects": degradation_applied,
+        "panels": [
+            {
+                "panel_id": "A",
+                "plot_type": plot_type_name,
+                "data_series": data_points
             }
-            ground_truth = {"gt_parse": structured_gt}
-            metadata_entry = {
+        ]
+    }
+    ground_truth = {"gt_parse": structured_gt, "task": "p2n"}
+    metadata_entry = {
+        "file_name": f"images/{plot_type_name}/{image_filename}",
+        "ground_truth": json.dumps(ground_truth)
+    }
+    result_lines.append(json.dumps(metadata_entry))
+    if aux_tasks:
+        ax_info = extract_axis_info(fig_meta)
+        if ax_info:
+            aux_entry = {
                 "file_name": f"images/{plot_type_name}/{image_filename}",
-                "ground_truth": json.dumps(ground_truth)
+                "ground_truth": json.dumps({"gt_parse": ax_info, "task": "axis_info"})
             }
-            f.write(json.dumps(metadata_entry) + "\n")
-            
-            # Emit auxiliary sub-task entries for the same image
-            if aux_tasks:
-                ax_info = extract_axis_info(fig_meta)
-                if ax_info:
-                    aux_entry = {
-                        "file_name": f"images/{plot_type_name}/{image_filename}",
-                        "ground_truth": json.dumps({"gt_parse": ax_info, "task": "axis_info"})
-                    }
-                    f.write(json.dumps(aux_entry) + "\n")
-                
-                elem_info = extract_element_count(fig_meta)
-                if elem_info:
-                    aux_entry = {
-                        "file_name": f"images/{plot_type_name}/{image_filename}",
-                        "ground_truth": json.dumps({"gt_parse": elem_info, "task": "element_count"})
-                    }
-                    f.write(json.dumps(aux_entry) + "\n")
+            result_lines.append(json.dumps(aux_entry))
+        elem_info = extract_element_count(fig_meta)
+        if elem_info:
+            aux_entry = {
+                "file_name": f"images/{plot_type_name}/{image_filename}",
+                "ground_truth": json.dumps({"gt_parse": elem_info, "task": "element_count"})
+            }
+            result_lines.append(json.dumps(aux_entry))
+    return result_lines
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate synthetic scientific plots.")
