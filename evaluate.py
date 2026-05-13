@@ -24,10 +24,16 @@ from dataset import TASK_TOKENS
 def load_model(model_dir):
     """Load trained model and processor."""
     processor = DonutProcessor.from_pretrained(model_dir)
-    model = VisionEncoderDecoderModel.from_pretrained(model_dir)
-    
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model.to(device)
+    
+    # Use accelerate for automatic multi-GPU inference if available
+    try:
+        import accelerate
+        model = VisionEncoderDecoderModel.from_pretrained(model_dir, device_map="auto")
+    except ImportError:
+        model = VisionEncoderDecoderModel.from_pretrained(model_dir)
+        model.to(device)
+        
     model.eval()
     return model, processor, device
 
@@ -35,12 +41,16 @@ def load_model(model_dir):
 def run_inference(model, processor, device, image_path, task="p2n", max_length=1536):
     """Run inference on a single image for a given task."""
     image = Image.open(image_path).convert("RGB")
-    pixel_values = processor(image, return_tensors="pt").pixel_values.to(device)
+    pixel_values = processor(image, return_tensors="pt").pixel_values
     
     start_tok, end_tok = TASK_TOKENS.get(task, TASK_TOKENS["p2n"])
     decoder_input_ids = processor.tokenizer(
         start_tok, add_special_tokens=False, return_tensors="pt"
-    ).input_ids.to(device)
+    ).input_ids
+    
+    input_device = next(model.parameters()).device if hasattr(model, 'hf_device_map') else device
+    pixel_values = pixel_values.to(input_device)
+    decoder_input_ids = decoder_input_ids.to(input_device)
     
     with torch.no_grad():
         outputs = model.generate(

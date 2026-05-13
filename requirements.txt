@@ -7,3 +7,4 @@ Pillow
 pandas
 tqdm
 scikit-learn
+accelerate

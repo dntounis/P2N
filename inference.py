@@ -31,12 +31,19 @@ from dataset import TASK_TOKENS
 def load_model(model_dir):
     """Load trained model and processor."""
     processor = DonutProcessor.from_pretrained(model_dir)
-    model = VisionEncoderDecoderModel.from_pretrained(model_dir)
-    
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model.to(device)
+    
+    # Use accelerate for automatic multi-GPU inference if available
+    try:
+        import accelerate
+        model = VisionEncoderDecoderModel.from_pretrained(model_dir, device_map="auto")
+        print("Model loaded with accelerate (multi-GPU supported).")
+    except ImportError:
+        model = VisionEncoderDecoderModel.from_pretrained(model_dir)
+        model.to(device)
+        print(f"Model loaded on {device} (single device). For multi-GPU, 'pip install accelerate'.")
+        
     model.eval()
-    print(f"Model loaded on {device}")
     return model, processor, device
 
 
@@ -55,12 +62,17 @@ def infer(model, processor, device, image_path, task="p2n", max_length=1536):
         dict: Parsed JSON output, or raw string if JSON parsing fails
     """
     image = Image.open(image_path).convert("RGB")
-    pixel_values = processor(image, return_tensors="pt").pixel_values.to(device)
+    pixel_values = processor(image, return_tensors="pt").pixel_values
     
     start_tok, end_tok = TASK_TOKENS.get(task, TASK_TOKENS["p2n"])
     decoder_input_ids = processor.tokenizer(
         start_tok, add_special_tokens=False, return_tensors="pt"
-    ).input_ids.to(device)
+    ).input_ids
+    
+    # Move inputs to the same device as the model's first layer
+    input_device = next(model.parameters()).device if hasattr(model, 'hf_device_map') else device
+    pixel_values = pixel_values.to(input_device)
+    decoder_input_ids = decoder_input_ids.to(input_device)
     
     with torch.no_grad():
         outputs = model.generate(
