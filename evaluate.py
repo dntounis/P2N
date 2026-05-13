@@ -48,7 +48,7 @@ def run_inference(model, processor, device, image_path, task="p2n", max_length=1
         start_tok, add_special_tokens=False, return_tensors="pt"
     ).input_ids
     
-    input_device = next(model.parameters()).device if hasattr(model, 'hf_device_map') else device
+    input_device = next(model.parameters()).device
     pixel_values = pixel_values.to(input_device)
     decoder_input_ids = decoder_input_ids.to(input_device)
     

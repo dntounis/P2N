@@ -70,7 +70,7 @@ def infer(model, processor, device, image_path, task="p2n", max_length=1536):
     ).input_ids
     
     # Move inputs to the same device as the model's first layer
-    input_device = next(model.parameters()).device if hasattr(model, 'hf_device_map') else device
+    input_device = next(model.parameters()).device
     pixel_values = pixel_values.to(input_device)
     decoder_input_ids = decoder_input_ids.to(input_device)
     
