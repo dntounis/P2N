@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from scipy.stats import gaussian_kde
+from matplotlib.patches import Ellipse
 
 def random_style(ax):
     if random.random() > 0.5:
@@ -508,6 +509,165 @@ def generate_residual_bump(fig, ax):
     gt = [{"type": "residual_bump", "peak_x": 125, "peak_y": 6}]
     return gt
 
+def generate_ashby_chart(fig, ax):
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    
+    materials = ['Polymers', 'Composites', 'Wood', 'Metals', 'Ceramics', 'Foams', 'Elastomers']
+    colors = ['#ff9999', '#66b3ff', '#99ff99', '#ffcc99', '#c2c2f0', '#ffb3e6', '#c4e17f']
+    
+    gt = []
+    for mat, color in zip(materials, colors):
+        x_center = 10 ** random.uniform(1, 4)
+        y_center = 10 ** random.uniform(-1, 3)
+        width = x_center * random.uniform(0.5, 1.5)
+        height = y_center * random.uniform(0.5, 1.5)
+        angle = random.uniform(-45, 45)
+        
+        ellipse = Ellipse((x_center, y_center), width, height, angle=angle, 
+                          facecolor=color, alpha=0.6, edgecolor='black')
+        ax.add_patch(ellipse)
+        ax.text(x_center, y_center, mat, ha='center', va='center', fontsize=8)
+        
+        gt.append({"type": "ashby_bubble", "material": mat, "x_center": round(x_center, 2), "y_center": round(y_center, 2)})
+        
+    ax.set_xlim(10, 10000)
+    ax.set_ylim(0.01, 1000)
+    ax.set_xlabel(r'Density (kg/m$^3$)')
+    ax.set_ylabel('Young\'s Modulus (GPa)')
+    ax.grid(True, which="both", ls="--", alpha=0.5)
+    
+    return gt
+
+def generate_phase_diagram(fig, ax):
+    T = np.linspace(200, 700, 100)
+    
+    # Triple point
+    T_tp, P_tp = 273.16, 0.006
+    # Critical point
+    T_cp, P_cp = 647.096, 217.7
+    
+    # Solid-Gas
+    T_sg = np.linspace(200, T_tp, 50)
+    P_sg = P_tp * np.exp(6000 * (1/T_tp - 1/T_sg))
+    
+    # Liquid-Gas
+    T_lg = np.linspace(T_tp, T_cp, 50)
+    P_lg = P_tp * np.exp(4000 * (1/T_tp - 1/T_lg))
+    
+    # Solid-Liquid (anomalous for water: negative slope)
+    T_sl = np.linspace(273.16, 260, 50)
+    P_sl = np.linspace(P_tp, 1000, 50)
+    
+    ax.plot(T_sg, P_sg, 'r-')
+    ax.plot(T_lg, P_lg, 'r-')
+    ax.plot(T_sl, P_sl, 'r-')
+    
+    ax.plot([T_tp], [P_tp], 'ko')
+    ax.text(T_tp, P_tp*0.5, 'Triple\nPoint', ha='center', va='top')
+    
+    ax.plot([T_cp], [P_cp], 'ko')
+    ax.text(T_cp, P_cp*1.5, 'Critical\nPoint', ha='center', va='bottom')
+    
+    ax.text(240, 10, 'Ice', fontsize=12)
+    ax.text(400, 10, 'Water', fontsize=12)
+    ax.text(400, 0.001, 'Vapor', fontsize=12)
+    
+    ax.set_yscale('log')
+    ax.set_xlim(200, 700)
+    ax.set_ylim(0.0001, 1000)
+    ax.set_xlabel('Temperature (K)')
+    ax.set_ylabel('Pressure (atm)')
+    ax.set_title('Phase Diagram of Water')
+    
+    gt = [{"type": "phase_diagram", "triple_point": [T_tp, P_tp], "critical_point": [T_cp, P_cp]}]
+    return gt
+
+def generate_parity_grid(fig, _):
+    fig.clf()
+    axes = fig.subplots(1, 3)
+    models = ['M3GNet', 'TensorNet', 'CHGNet']
+    colors = ['#ff7f0e', '#d62728', '#8c564b']
+    
+    gt = []
+    for i, ax in enumerate(axes):
+        x = np.random.uniform(0, 400, 500)
+        noise = np.random.normal(0, 20 + i*5, 500)
+        y = x + noise
+        
+        ax.scatter(x, y, color=colors[i], s=5, alpha=0.6)
+        ax.plot([0, 400], [0, 400], 'k-', lw=1)
+        
+        r2 = 1 - np.var(y - x) / np.var(x)
+        mae = np.mean(np.abs(y - x))
+        ax.text(0.05, 0.95, f'$R^2$ = {r2:.2f}\nMAE = {mae:.2f}', transform=ax.transAxes, va='top')
+        
+        ax.set_xlabel(r'$K_{DFT}$ (GPa)')
+        if i == 0:
+            ax.set_ylabel(r'$K_{%s}$ (GPa)' % models[i])
+        else:
+            ax.set_ylabel(r'$K_{%s}$ (GPa)' % models[i])
+            
+        ax.set_xlim(0, 400)
+        ax.set_ylim(0, 400)
+        
+        gt.append({"type": "parity_plot", "model": models[i], "R2": round(r2, 2), "MAE": round(mae, 2)})
+        
+    plt.tight_layout()
+    return gt
+
+def generate_stress_strain(fig, ax):
+    strain = np.linspace(0, 0.3, 100)
+    E = 200e3 # Elastic modulus
+    yield_strain = 0.005
+    yield_stress = E * yield_strain
+    
+    # Elastic region
+    elastic = strain <= yield_strain
+    stress = np.zeros_like(strain)
+    stress[elastic] = E * strain[elastic]
+    
+    # Plastic region (Hollomon's equation: sigma = K * epsilon^n)
+    K = 1500
+    n = 0.2
+    plastic = strain > yield_strain
+    stress[plastic] = K * (strain[plastic])**n
+    
+    # Smooth transition
+    smooth_idx = (strain > yield_strain - 0.002) & (strain < yield_strain + 0.005)
+    stress[smooth_idx] = np.interp(strain[smooth_idx], 
+                                   [strain[smooth_idx][0], strain[smooth_idx][-1]], 
+                                   [stress[smooth_idx][0], stress[smooth_idx][-1]])
+    
+    ax.plot(strain, stress, 'b-', lw=2)
+    
+    # Annotations
+    ax.plot([yield_strain], [yield_stress], 'bo')
+    ax.annotate('Yield\nStrength', xy=(yield_strain, yield_stress), xytext=(yield_strain+0.02, yield_stress-100),
+                arrowprops=dict(arrowstyle="->", color='gray'))
+                
+    uts_idx = np.argmax(stress)
+    ax.plot([strain[uts_idx]], [stress[uts_idx]], 'bo')
+    ax.annotate('Ultimate\nStrength', xy=(strain[uts_idx], stress[uts_idx]), xytext=(strain[uts_idx], stress[uts_idx]-150),
+                arrowprops=dict(arrowstyle="->", color='gray'))
+                
+    ax.plot([strain[-1]], [stress[-1]], 'bo')
+    ax.annotate('Fracture', xy=(strain[-1], stress[-1]), xytext=(strain[-1]-0.05, stress[-1]-100),
+                arrowprops=dict(arrowstyle="->", color='gray'))
+                
+    # Regions
+    ax.axvspan(0, yield_strain, color='green', alpha=0.2)
+    ax.text(yield_strain/2, max(stress)*0.9, 'Elastic\nRegion', ha='center', va='center')
+    ax.text(0.15, max(stress)*0.9, 'Plastic Region', ha='center', va='center')
+    
+    ax.set_xlabel(r'Strain, $\varepsilon$')
+    ax.set_ylabel(r'Stress, $\sigma$')
+    ax.set_xlim(0, 0.32)
+    ax.set_ylim(0, max(stress)*1.1)
+    
+    gt = [{"type": "stress_strain", "yield_stress": float(yield_stress), "uts": float(stress[uts_idx])}]
+    return gt
+
 def generate_plot(output_dir, num_samples):
     os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
     metadata_path = os.path.join(output_dir, "metadata.jsonl")
@@ -520,7 +680,9 @@ def generate_plot(output_dir, num_samples):
         generate_corner_plot, generate_contour_overlay, 
         generate_bump_hunt, generate_stacked_ratio,
         generate_double_y_axis, generate_multi_line_log,
-        generate_stacked_histogram, generate_residual_bump
+        generate_stacked_histogram, generate_residual_bump,
+        generate_ashby_chart, generate_phase_diagram,
+        generate_parity_grid, generate_stress_strain
     ]
     
     with open(metadata_path, 'w') as f:
