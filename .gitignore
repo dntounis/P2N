@@ -4,3 +4,5 @@ data/
 p2n-model/
 training.log
 .DS_Store
+frontend/node_modules/
+*.log
