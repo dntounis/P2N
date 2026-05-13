@@ -412,6 +412,102 @@ def generate_stacked_ratio(fig, _):
         gt.append({"type": "stacked_ratio", "bin": f"SR{i+1}", "data": int(data[i]), "bkg_total": round(total_bkg[i], 2)})
     return gt
 
+def generate_double_y_axis(fig, ax):
+    x = np.arange(10, 39)
+    y1 = np.random.uniform(0, 8, len(x)) * 1e34  # Peak luminosity
+    y2 = np.cumsum(np.random.uniform(10, 200, len(x)))  # Integrated luminosity
+    
+    ax.plot(x, y1, 'ro', markersize=4, label='Peak luminosity')
+    ax.set_ylabel('Luminosity [cm$^{-2}$s$^{-1}$]', color='r')
+    ax.tick_params(axis='y', labelcolor='r')
+    
+    ax2 = ax.twinx()
+    ax2.plot(x, y2, 'b-', linewidth=2, label='Integrated luminosity')
+    ax2.set_ylabel('Integrated luminosity [fb$^{-1}$]', color='b')
+    ax2.tick_params(axis='y', labelcolor='b')
+    
+    # Add shaded regions for LS1, LS2 etc.
+    for i in range(1, 6):
+        ax.axvspan(10 + i*5, 10 + i*5 + 2, color='blue', alpha=0.2)
+        ax.text(10 + i*5 + 1, 4e34, f'LS{i}', rotation=90, color='white', fontweight='bold', ha='center')
+        
+    ax.set_xlabel('Year')
+    fig.legend(loc="upper center", ncol=2)
+    
+    gt = []
+    for i in range(len(x)):
+        gt.append({"type": "double_y", "year": int(x[i]), "peak": float(y1[i]), "integrated": float(y2[i])})
+    return gt
+
+def generate_multi_line_log(fig, ax):
+    x = np.logspace(0, 2, 100)
+    y1 = 10 * x**-1.5 + np.random.normal(0, 0.1, len(x))
+    y2 = 5 * x**-1.2 + np.random.normal(0, 0.05, len(x))
+    
+    ax.plot(x, y1, 'r-', label='1st gen.')
+    ax.plot(x, y2, 'gray', label='Next gen.', linestyle='--')
+    
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel(r'Primary mass ($M_\odot$)')
+    ax.set_ylabel(r'$\Gamma (Gpc^{-3} yr^{-1} M_\odot^{-1})$')
+    ax.legend()
+    
+    # Annotations
+    ax.annotate('The cliff', xy=(40, 10**-1), xytext=(50, 10**-0.5), color='blue',
+                arrowprops=dict(facecolor='blue', shrink=0.05))
+    
+    gt = [{"type": "multi_line", "x_min": round(float(x.min()), 2), "x_max": round(float(x.max()), 2)}]
+    return gt
+
+def generate_stacked_histogram(fig, ax):
+    bins = np.linspace(70, 500, 30)
+    
+    bkg1 = np.random.normal(90, 5, 500)  # Z peak
+    bkg2 = np.random.normal(200, 30, 800) # Broad background
+    sig = np.random.normal(125, 2, 50)   # Higgs
+    
+    ax.hist([bkg1, bkg2, sig], bins=bins, stacked=True, 
+            color=['#99ccff', '#6699ff', '#ff9999'], 
+            label=['Z+X', 'ZZ', 'H(125)'])
+            
+    # Data
+    counts, _ = np.histogram(np.concatenate([bkg1, bkg2, sig]), bins=bins)
+    data = np.random.poisson(counts)
+    bin_centers = 0.5 * (bins[1:] + bins[:-1])
+    ax.errorbar(bin_centers, data, yerr=np.sqrt(data), fmt='ko', label='Data')
+    
+    ax.set_xlabel(r'$m_{4\ell}$ (GeV)')
+    ax.set_ylabel('Events / 4 GeV')
+    ax.legend()
+    
+    gt = [{"type": "stacked_hist", "peaks": [90, 125, 200]}]
+    return gt
+
+def generate_residual_bump(fig, ax):
+    x = np.linspace(100, 160, 30)
+    residual = np.random.normal(0, 2, len(x))
+    
+    # Add bump
+    bump_idx = (x > 120) & (x < 130)
+    residual[bump_idx] += 5 * np.exp(-0.5 * ((x[bump_idx] - 125) / 2)**2)
+    
+    ax.errorbar(x, residual, yerr=np.ones_like(x)*2, fmt='k^')
+    ax.axhline(0, color='b', linestyle='--')
+    
+    # Fit line
+    x_fit = np.linspace(100, 160, 100)
+    y_fit = 6 * np.exp(-0.5 * ((x_fit - 125) / 1.5)**2)
+    ax.plot(x_fit, y_fit, 'b-', linewidth=2)
+    
+    ax.text(125, -4, r'H$\to\gamma\gamma$', ha='center')
+    
+    ax.set_xlabel(r'$m_{\gamma\gamma}$ [GeV]')
+    ax.set_ylabel('Residuals')
+    
+    gt = [{"type": "residual_bump", "peak_x": 125, "peak_y": 6}]
+    return gt
+
 def generate_plot(output_dir, num_samples):
     os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
     metadata_path = os.path.join(output_dir, "metadata.jsonl")
@@ -422,7 +518,9 @@ def generate_plot(output_dir, num_samples):
         generate_pie, generate_histogram, generate_density,
         generate_hep_brazil, generate_heatmap, generate_contour,
         generate_corner_plot, generate_contour_overlay, 
-        generate_bump_hunt, generate_stacked_ratio
+        generate_bump_hunt, generate_stacked_ratio,
+        generate_double_y_axis, generate_multi_line_log,
+        generate_stacked_histogram, generate_residual_bump
     ]
     
     with open(metadata_path, 'w') as f:
