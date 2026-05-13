@@ -14,8 +14,9 @@ app.add_middleware(
 )
 
 # Use the trained model directory when available, but fallback to donut-base for demo
-MODEL_DIR = "./p2n-model" if os.path.exists("./p2n-model") else "naver-clova-ix/donut-base"
+MODEL_DIR = "./p2n-model" if os.path.exists("./p2n-model/preprocessor_config.json") else "naver-clova-ix/donut-base"
 print(f"Loading model from {MODEL_DIR}...")
+model, processor, device = None, None, None
 try:
     model, processor, device = load_model(MODEL_DIR)
     print("Model loaded successfully.")
