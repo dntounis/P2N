@@ -130,17 +130,22 @@ def generate_plot(output_dir, num_samples):
         for i in tqdm(range(num_samples), desc="Generating Complex Data"):
             fig, ax = plt.subplots(figsize=(random.uniform(5.0, 7.0), random.uniform(5.0, 7.0)))
             generator = random.choice(plot_types)
+            plot_type_name = generator.__name__.replace('generate_', '')
+            
             data_points = generator(ax)
             
+            image_dir = os.path.join(output_dir, "images", plot_type_name)
+            os.makedirs(image_dir, exist_ok=True)
+            
             image_filename = f"image_{i:05d}.png"
-            image_path = os.path.join(output_dir, "images", image_filename)
+            image_path = os.path.join(image_dir, image_filename)
             
             plt.savefig(image_path, bbox_inches='tight', dpi=random.randint(80, 150))
             plt.close(fig)
             
             ground_truth = {"gt_parse": {"data": data_points}}
             metadata_entry = {
-                "file_name": f"images/{image_filename}",
+                "file_name": f"images/{plot_type_name}/{image_filename}",
                 "ground_truth": json.dumps(ground_truth)
             }
             f.write(json.dumps(metadata_entry) + "\n")
