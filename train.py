@@ -1,4 +1,5 @@
 import argparse
+import json
 from transformers import VisionEncoderDecoderModel, DonutProcessor, Seq2SeqTrainer, Seq2SeqTrainingArguments
 from datasets import load_dataset
 
@@ -8,8 +9,12 @@ def train(dataset_path, output_dir, epochs, batch_size, learning_rate, max_lengt
     processor = DonutProcessor.from_pretrained(model_id)
     model = VisionEncoderDecoderModel.from_pretrained(model_id)
 
-    # Add special token for our task
-    new_tokens = ["<s_p2n>", "</s_p2n>"]
+    # Add special tokens for main task and auxiliary sub-tasks
+    new_tokens = [
+        "<s_p2n>", "</s_p2n>",
+        "<s_axis_info>", "</s_axis_info>",
+        "<s_element_count>", "</s_element_count>",
+    ]
     processor.tokenizer.add_tokens(new_tokens)
     model.decoder.resize_token_embeddings(len(processor.tokenizer))
 
@@ -35,9 +40,21 @@ def train(dataset_path, output_dir, epochs, batch_size, learning_rate, max_lengt
         image = example["image"].convert("RGB")
         pixel_values = processor(image, return_tensors="pt").pixel_values.squeeze()
         
-        # Parse ground truth text 
+        # Parse ground truth and select task-specific prompt token
         gt_text = example.get("ground_truth", "{}")
-        target_text = f"<s_p2n>{gt_text}</s_p2n>"
+        try:
+            gt_parsed = json.loads(gt_text)
+            task = gt_parsed.get("task", "p2n")
+        except (json.JSONDecodeError, TypeError):
+            task = "p2n"
+        
+        task_tokens = {
+            "p2n": ("<s_p2n>", "</s_p2n>"),
+            "axis_info": ("<s_axis_info>", "</s_axis_info>"),
+            "element_count": ("<s_element_count>", "</s_element_count>"),
+        }
+        start_tok, end_tok = task_tokens.get(task, ("<s_p2n>", "</s_p2n>"))
+        target_text = f"{start_tok}{gt_text}{end_tok}"
         
         labels = processor.tokenizer(
             target_text,
