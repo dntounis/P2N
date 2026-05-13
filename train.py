@@ -3,7 +3,7 @@ import json
 from transformers import VisionEncoderDecoderModel, DonutProcessor, Seq2SeqTrainer, Seq2SeqTrainingArguments
 from datasets import load_dataset
 
-def train(dataset_path, output_dir, epochs, batch_size, learning_rate, max_length, gradient_accumulation_steps):
+def train(dataset_path, output_dir, epochs, max_steps, batch_size, learning_rate, max_length, gradient_accumulation_steps):
     # Load model and processor
     model_id = "naver-clova-ix/donut-base"
     processor = DonutProcessor.from_pretrained(model_id)
@@ -81,6 +81,7 @@ def train(dataset_path, output_dir, epochs, batch_size, learning_rate, max_lengt
     training_args = Seq2SeqTrainingArguments(
         output_dir=output_dir,
         num_train_epochs=epochs,
+        max_steps=max_steps,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         gradient_accumulation_steps=gradient_accumulation_steps,
@@ -124,11 +125,12 @@ if __name__ == "__main__":
     parser.add_argument("--dataset_path", type=str, default="data", help="Path to the dataset")
     parser.add_argument("--output_dir", type=str, default="./p2n-model", help="Output directory for model")
     parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs")
+    parser.add_argument("--max_steps", type=int, default=-1, help="Max training steps (useful for smoke tests)")
     parser.add_argument("--batch_size", type=int, default=2, help="Per-device batch size")
     parser.add_argument("--learning_rate", type=float, default=2e-5, help="Learning rate")
     parser.add_argument("--max_length", type=int, default=1536, help="Max decoder sequence length")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8, help="Gradient accumulation steps")
     args = parser.parse_args()
     
-    train(args.dataset_path, args.output_dir, args.epochs, args.batch_size, 
+    train(args.dataset_path, args.output_dir, args.epochs, args.max_steps, args.batch_size, 
           args.learning_rate, args.max_length, args.gradient_accumulation_steps)

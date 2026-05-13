@@ -306,7 +306,11 @@ def evaluate(model_dir, dataset_path, num_samples, max_length):
     }
     
     # Save results
-    results_path = os.path.join(model_dir, "eval_results.json")
+    if os.path.exists(model_dir):
+        results_path = os.path.join(model_dir, "eval_results.json")
+    else:
+        results_path = "eval_results.json"
+        
     with open(results_path, "w") as f:
         json.dump(summary, f, indent=2)
     print(f"  Results saved to {results_path}")
