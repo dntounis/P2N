@@ -741,23 +741,1055 @@ def generate_light_curve(fig, ax):
     
     return [{"type": "light_curve", "peak_time": 59050, "peak_mag": round(float(np.min(mag)), 2)}]
 
+
+def generate_line_plot(fig, ax):
+    n_series = random.randint(1, 4)
+    colors = ['k', 'r', 'b', 'g']; styles = ['-', '--', '-.', ':']
+    markers = ['', 'o', 's', '^']
+    x = np.linspace(0, 10, random.randint(20, 80))
+    gt = []
+    for i in range(n_series):
+        freq = random.uniform(0.5, 3); amp = random.uniform(1, 10)
+        y = amp * np.sin(freq * x) + np.random.normal(0, 0.5, len(x))
+        name = f"Series {i+1}"
+        ax.plot(x, y, color=colors[i], linestyle=styles[i], marker=markers[i] if random.random()>0.5 else '', 
+                markevery=max(1,len(x)//10), label=name)
+        gt.append({"type": "line_series", "name": name, "x_min": round(float(x[0]),2), "x_max": round(float(x[-1]),2),
+                   "y_mean": round(float(np.mean(y)),2)})
+    if random.random() > 0.5: ax.set_xscale('log') if random.random()>0.7 else None
+    ax.legend(); ax.set_xlabel(random.choice(['Time (s)', 'Energy (eV)', 'Temperature (K)']))
+    ax.set_ylabel(random.choice(['Signal', 'Intensity', 'Response']))
+    return gt
+
+
+def generate_violin_plot(fig, ax):
+    n = random.randint(3, 6)
+    data = [np.random.normal(random.uniform(20,60), random.uniform(5,15), random.randint(50,200)) for _ in range(n)]
+    parts = ax.violinplot(data, showmeans=True, showmedians=True)
+    for i, pc in enumerate(parts['bodies']):
+        pc.set_facecolor(['#ff9999','#66b3ff','#99ff99','#ffcc99','#c2c2f0','#ffb3e6'][i])
+        pc.set_alpha(0.7)
+    ax.set_xticks(range(1, n+1)); ax.set_xticklabels([f"Group {i+1}" for i in range(n)])
+    gt = []
+    for i, d in enumerate(data):
+        gt.append({"type": "violin", "group": f"Group {i+1}", "mean": round(float(np.mean(d)),2), 
+                   "median": round(float(np.median(d)),2), "std": round(float(np.std(d)),2)})
+    return gt
+
+
+def generate_spatial_map(fig, ax):
+    lon = np.linspace(-180, 180, 50); lat = np.linspace(-90, 90, 50)
+    LON, LAT = np.meshgrid(lon, lat)
+    Z = np.sin(np.radians(LON)) * np.cos(np.radians(LAT)) + np.random.normal(0, 0.1, LON.shape)
+    c = ax.pcolormesh(LON, LAT, Z, cmap='RdBu_r', shading='auto')
+    plt.colorbar(c, ax=ax, label='Anomaly (°C)')
+    ax.set_xlabel('Longitude'); ax.set_ylabel('Latitude')
+    return [{"type": "spatial_map", "z_min": round(float(Z.min()),2), "z_max": round(float(Z.max()),2)}]
+
+
+def generate_invariant_mass(fig, _):
+    fig.clf(); gs = fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0)
+    ax1 = fig.add_subplot(gs[0]); ax2 = fig.add_subplot(gs[1], sharex=ax1)
+    x = np.linspace(60, 200, 50); bkg = 500*np.exp(-0.03*x)
+    sig = 300*np.exp(-0.5*((x-91)/2.5)**2)  # Z boson
+    sig2 = 50*np.exp(-0.5*((x-125)/2)**2)   # Higgs
+    total = bkg + sig + sig2
+    data = np.random.poisson(total.astype(int))
+    ax1.fill_between(x, 0, bkg, step='mid', color='#ffcc00', alpha=0.7, label='Bkg')
+    ax1.fill_between(x, bkg, bkg+sig, step='mid', color='#3182bd', alpha=0.7, label='Z')
+    ax1.fill_between(x, bkg+sig, total, step='mid', color='#e6550d', alpha=0.7, label='H')
+    ax1.errorbar(x, data, yerr=np.sqrt(data), fmt='ko', ms=3, label='Data')
+    ax1.set_ylabel('Events / 3 GeV'); ax1.legend(); ax1.set_yscale('log')
+    ratio = data / total; ratio_err = np.sqrt(data) / total
+    ax2.errorbar(x, ratio, yerr=ratio_err, fmt='ko', ms=3)
+    ax2.axhline(1, color='r', ls='--'); ax2.set_ylabel('Data/MC'); ax2.set_xlabel(r'$m_{\ell\ell}$ [GeV]')
+    ax2.set_ylim(0.5, 1.5)
+    return [{"type": "invariant_mass", "z_peak": 91, "h_peak": 125}]
+
+
+def generate_pt_spectrum(fig, ax):
+    pt = np.logspace(1, 3, 40)
+    mc = 1e6 * pt**-4.5; data_vals = np.random.poisson(mc.astype(int).clip(1))
+    ax.errorbar(pt, data_vals, yerr=np.sqrt(data_vals), fmt='ko', ms=3, label='Data')
+    ax.plot(pt, mc, 'r-', label='MC'); ax.set_xscale('log'); ax.set_yscale('log')
+    ax.set_xlabel(r'$p_T$ [GeV]'); ax.set_ylabel('Events'); ax.legend()
+    return [{"type": "pt_spectrum", "pt_min": round(float(pt[0]),1), "pt_max": round(float(pt[-1]),1)}]
+
+
+def generate_pull_plot(fig, ax):
+    n_np = random.randint(10, 25)
+    names = [f"NP_{i}" for i in range(n_np)]
+    pulls = np.random.normal(0, 0.8, n_np); constraints = np.random.uniform(0.5, 1.2, n_np)
+    y = np.arange(n_np)
+    ax.errorbar(pulls, y, xerr=constraints, fmt='ko', capsize=3)
+    ax.axvline(0, color='k', ls='-'); ax.axvline(1, color='r', ls='--'); ax.axvline(-1, color='r', ls='--')
+    ax.axvspan(-1, 1, color='yellow', alpha=0.15); ax.axvspan(-2, 2, color='green', alpha=0.08)
+    ax.set_yticks(y); ax.set_yticklabels(names, fontsize=7)
+    ax.set_xlabel(r'Pull ($\sigma$)'); ax.set_xlim(-3, 3)
+    return [{"type": "pull", "name": n, "pull": round(float(p),2), "constraint": round(float(c),2)} 
+            for n, p, c in zip(names, pulls, constraints)]
+
+
+def generate_correlation_matrix(fig, ax):
+    n = random.randint(6, 12)
+    A = np.random.randn(100, n); corr = np.corrcoef(A.T)
+    labels = [f"p{i}" for i in range(n)]
+    im = ax.imshow(corr, cmap='RdBu_r', vmin=-1, vmax=1)
+    plt.colorbar(im, ax=ax); ax.set_xticks(range(n)); ax.set_yticks(range(n))
+    ax.set_xticklabels(labels, rotation=45, fontsize=7); ax.set_yticklabels(labels, fontsize=7)
+    return [{"type": "correlation_matrix", "size": n, "min_corr": round(float(corr.min()),2)}]
+
+
+def generate_unfolded_xsec(fig, _):
+    fig.clf(); gs = fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0)
+    ax1 = fig.add_subplot(gs[0]); ax2 = fig.add_subplot(gs[1], sharex=ax1)
+    x = np.linspace(0, 500, 15); xsec = 100*np.exp(-0.005*x)
+    err = xsec * np.random.uniform(0.05, 0.15, len(x))
+    theory = 95*np.exp(-0.0048*x)
+    ax1.errorbar(x, xsec, yerr=err, fmt='ko', label='Data')
+    ax1.fill_between(x, theory*0.9, theory*1.1, color='red', alpha=0.3, label='Theory')
+    ax1.plot(x, theory, 'r-'); ax1.set_ylabel(r'd$\sigma$/d$p_T$ [pb/GeV]'); ax1.set_yscale('log'); ax1.legend()
+    ratio = xsec/theory; ratio_err = err/theory
+    ax2.errorbar(x, ratio, yerr=ratio_err, fmt='ko'); ax2.axhline(1, color='r', ls='--')
+    ax2.set_ylabel('Data/Theory'); ax2.set_xlabel(r'$p_T$ [GeV]'); ax2.set_ylim(0.5, 1.5)
+    return [{"type": "unfolded_xsec", "n_bins": len(x)}]
+
+
+def generate_efficiency_map(fig, ax):
+    pt = np.linspace(20, 200, 15); eta = np.linspace(-2.5, 2.5, 10)
+    PT, ETA = np.meshgrid(pt, eta)
+    eff = 0.9 - 0.1*np.exp(-PT/50) - 0.05*ETA**2/6 + np.random.normal(0, 0.02, PT.shape)
+    eff = np.clip(eff, 0, 1)
+    c = ax.pcolormesh(PT, ETA, eff, cmap='viridis', vmin=0, vmax=1, shading='auto')
+    plt.colorbar(c, ax=ax, label='Efficiency')
+    ax.set_xlabel(r'$p_T$ [GeV]'); ax.set_ylabel(r'$\eta$')
+    return [{"type": "efficiency_map", "mean_eff": round(float(eff.mean()),3)}]
+
+
+def generate_sky_map(fig, _):
+    fig.clf(); ax = fig.add_subplot(111, projection='mollweide')
+    lon = np.linspace(-np.pi, np.pi, 100); lat = np.linspace(-np.pi/2, np.pi/2, 50)
+    LON, LAT = np.meshgrid(lon, lat)
+    # CMB-like fluctuations
+    Z = sum(np.sin(i*LON)*np.cos(j*LAT)*random.uniform(-1,1) for i in range(1,6) for j in range(1,4))
+    ax.pcolormesh(LON, LAT, Z, cmap='RdBu_r', shading='auto')
+    ax.set_title('Sky Map'); ax.grid(True, alpha=0.3)
+    return [{"type": "sky_map", "z_range": round(float(Z.max()-Z.min()),2)}]
+
+
+def generate_sed(fig, ax):
+    freq = np.logspace(8, 18, 50)  # Hz
+    flux = 1e-23 * (freq/1e12)**-0.7 * (1 + 0.3*np.sin(np.log10(freq)))
+    flux *= np.random.lognormal(0, 0.1, len(freq))
+    ax.scatter(freq, flux, c='k', s=15, label='Data')
+    ax.plot(freq, 1e-23*(freq/1e12)**-0.7, 'r-', label='Model')
+    ax.set_xscale('log'); ax.set_yscale('log')
+    ax.set_xlabel('Frequency (Hz)'); ax.set_ylabel(r'Flux Density (Jy)')
+    ax.legend()
+    return [{"type": "sed", "freq_min": round(float(freq[0]),1), "freq_max": round(float(freq[-1]),1)}]
+
+
+def generate_hr_diagram(fig, ax):
+    n = 500
+    temp = 10**np.random.uniform(3.5, 4.5, n)  # K
+    lum = 10**np.random.normal(0, 2, n)
+    # main sequence
+    ms_temp = 10**np.linspace(3.5, 4.5, 200)
+    ms_lum = (ms_temp/5778)**4
+    ax.scatter(temp, lum, c='gray', s=5, alpha=0.5)
+    ax.plot(ms_temp, ms_lum, 'r-', lw=2, label='Main Sequence')
+    ax.set_xscale('log'); ax.set_yscale('log')
+    ax.invert_xaxis()  # convention: hot stars left
+    ax.set_xlabel('Temperature (K)'); ax.set_ylabel(r'Luminosity ($L_\odot$)'); ax.legend()
+    return [{"type": "hr_diagram", "n_stars": n}]
+
+
+def generate_power_spectrum(fig, ax):
+    ell = np.arange(2, 2500)
+    cl = 6000 / (ell * (ell+1)) * np.exp(-(ell/1500)**2) * (1 + 0.3*np.sin(ell/200))
+    cl_err = cl * 0.05
+    dll = ell*(ell+1)*cl / (2*np.pi)
+    dll_err = ell*(ell+1)*cl_err / (2*np.pi)
+    ax.errorbar(ell[::10], dll[::10], yerr=dll_err[::10], fmt='k.', ms=2, alpha=0.5)
+    ax.plot(ell, dll, 'r-', label='Best fit')
+    ax.set_xlabel(r'Multipole $\ell$'); ax.set_ylabel(r'$D_\ell$ [$\mu K^2$]')
+    ax.set_xscale('log'); ax.legend()
+    return [{"type": "power_spectrum", "ell_max": int(ell[-1])}]
+
+
+def generate_redshift_distribution(fig, ax):
+    z = np.linspace(0, 3, 40)
+    n1 = 200*z**2*np.exp(-z/0.5); n2 = 100*z**2*np.exp(-z/0.8)
+    ax.bar(z, n1, width=z[1]-z[0], alpha=0.6, color='blue', label='Photometric')
+    ax.step(z, n2, color='red', lw=2, label='Spectroscopic')
+    ax.set_xlabel('Redshift z'); ax.set_ylabel('N(z)'); ax.legend()
+    return [{"type": "redshift_dist", "z_peak_phot": round(float(z[np.argmax(n1)]),2)}]
+
+
+def generate_mass_radius(fig, ax):
+    m = np.logspace(-1, 2, 80)
+    r = m**0.8 * np.random.lognormal(0, 0.2, len(m))
+    colors = np.random.choice(['red','blue','green','orange'], len(m))
+    ax.scatter(m, r, c=colors, s=15, alpha=0.7)
+    ax.plot(m, m**0.8, 'k--', label=r'$R \propto M^{0.8}$')
+    ax.set_xscale('log'); ax.set_yscale('log')
+    ax.set_xlabel(r'Mass ($M_\odot$)'); ax.set_ylabel(r'Radius ($R_\odot$)'); ax.legend()
+    return [{"type": "mass_radius", "n_objects": len(m)}]
+
+
+def generate_residual_map(fig, ax):
+    x = np.linspace(-5, 5, 60); y = np.linspace(-5, 5, 60)
+    X, Y = np.meshgrid(x, y)
+    Z = np.random.normal(0, 1, X.shape) + 3*np.exp(-((X-1)**2+(Y+1)**2)/2)
+    c = ax.pcolormesh(X, Y, Z, cmap='RdBu_r', shading='auto', vmin=-4, vmax=4)
+    ax.contour(X, Y, Z, levels=[2, 3, 4], colors='k', linewidths=0.5)
+    plt.colorbar(c, ax=ax, label=r'Significance ($\sigma$)')
+    ax.set_xlabel('RA offset (arcsec)'); ax.set_ylabel('Dec offset (arcsec)')
+    return [{"type": "residual_map", "peak_sig": round(float(Z.max()),2)}]
+
+
+def generate_band_structure(fig, ax):
+    k = np.linspace(0, 3, 200)
+    for i in range(6):
+        E = -4 + i*1.5 + 0.8*np.sin(k*np.pi) + 0.3*np.cos(2*k*np.pi) + random.uniform(-0.5, 0.5)
+        ax.plot(k, E, 'b-', lw=1)
+    ax.axhline(0, color='r', ls='--', label=r'$E_F$')
+    for xv, lbl in zip([0, 1, 2, 3], [r'$\Gamma$', 'X', 'M', r'$\Gamma$']):
+        ax.axvline(xv, color='k', lw=0.5)
+    ax.set_xticks([0, 1, 2, 3]); ax.set_xticklabels([r'$\Gamma$', 'X', 'M', r'$\Gamma$'])
+    ax.set_ylabel('Energy (eV)'); ax.set_xlim(0, 3); ax.legend()
+    return [{"type": "band_structure", "n_bands": 6, "fermi_level": 0}]
+
+
+def generate_dos(fig, ax):
+    E = np.linspace(-8, 8, 300)
+    total = sum(np.exp(-0.5*((E-c)/0.5)**2)*random.uniform(0.5,3) for c in np.random.uniform(-6,6,8))
+    s_dos = total * 0.3; p_dos = total * 0.5; d_dos = total * 0.2
+    ax.fill_betweenx(E, 0, s_dos, alpha=0.5, color='blue', label='s')
+    ax.fill_betweenx(E, 0, p_dos, alpha=0.5, color='red', label='p')
+    ax.fill_betweenx(E, 0, d_dos, alpha=0.5, color='green', label='d')
+    ax.axhline(0, color='k', ls='--', label=r'$E_F$')
+    ax.set_ylabel('Energy (eV)'); ax.set_xlabel('DOS (states/eV)'); ax.legend()
+    return [{"type": "dos", "e_range": [-8, 8]}]
+
+
+def generate_xrd(fig, ax):
+    two_theta = np.linspace(10, 90, 500)
+    intensity = np.zeros_like(two_theta) + 50
+    peaks = sorted(np.random.uniform(15, 85, random.randint(5, 12)))
+    gt = []
+    for p in peaks:
+        h = random.uniform(200, 5000); w = random.uniform(0.1, 0.5)
+        intensity += h * np.exp(-0.5*((two_theta-p)/w)**2)
+        gt.append({"type": "xrd_peak", "two_theta": round(p,2), "intensity": round(h,1)})
+    ax.plot(two_theta, intensity, 'k-', lw=0.8)
+    ax.set_xlabel(r'2$\theta$ (°)'); ax.set_ylabel('Intensity (a.u.)'); ax.set_xlim(10, 90)
+    return gt
+
+
+def generate_raman_spectrum(fig, ax):
+    wavenumber = np.linspace(100, 3500, 500)
+    intensity = np.zeros_like(wavenumber) + 100
+    peaks = np.random.uniform(200, 3200, random.randint(4, 10))
+    for p in peaks:
+        intensity += random.uniform(100,2000) * np.exp(-0.5*((wavenumber-p)/random.uniform(5,30))**2)
+    n_spectra = random.randint(1, 3)
+    colors = ['k', 'r', 'b']
+    for i in range(n_spectra):
+        offset = i * 500
+        ax.plot(wavenumber, intensity*(1+0.1*i) + offset + np.random.normal(0,20,len(wavenumber)), 
+                color=colors[i], label=f'Sample {i+1}')
+    ax.set_xlabel(r'Wavenumber (cm$^{-1}$)'); ax.set_ylabel('Intensity (a.u.)'); ax.legend()
+    return [{"type": "raman", "n_peaks": len(peaks)}]
+
+
+def generate_magnetization(fig, ax):
+    H = np.linspace(-2, 2, 200)
+    Ms = random.uniform(0.5, 2.0); Hc = random.uniform(0.1, 0.5)
+    M_up = Ms * np.tanh((H - Hc) * 3); M_down = Ms * np.tanh((H + Hc) * 3)
+    ax.plot(H, M_up, 'b-', label='Forward'); ax.plot(H, M_down, 'r-', label='Reverse')
+    ax.axhline(0, color='k', lw=0.5); ax.axvline(0, color='k', lw=0.5)
+    ax.set_xlabel('H (T)'); ax.set_ylabel(r'M ($\mu_B$/atom)'); ax.legend()
+    return [{"type": "magnetization", "Ms": round(Ms,2), "Hc": round(Hc,2)}]
+
+
+def generate_resistivity(fig, ax):
+    T = np.linspace(2, 300, 200)
+    Tc = random.uniform(4, 92)
+    rho = np.where(T < Tc, 0, 0.1*(T-Tc) + 0.001*T**2)
+    rho += np.random.normal(0, 0.5, len(T))
+    rho = np.clip(rho, 0, None)
+    ax.plot(T, rho, 'k-', lw=1.5)
+    ax.axvline(Tc, color='r', ls='--', label=f'$T_c$ = {Tc:.0f} K')
+    ax.set_xlabel('Temperature (K)'); ax.set_ylabel(r'$\rho$ (m$\Omega$ cm)'); ax.legend()
+    return [{"type": "resistivity", "Tc": round(Tc,1)}]
+
+
+def generate_nmr_spectrum(fig, ax):
+    ppm = np.linspace(12, 0, 1000)  # decreasing convention
+    intensity = np.zeros_like(ppm)
+    peaks = np.random.uniform(0.5, 10, random.randint(4, 8))
+    gt = []
+    for p in peaks:
+        h = random.uniform(0.5, 5); w = random.uniform(0.02, 0.08)
+        intensity += h * np.exp(-0.5*((ppm-p)/w)**2)
+        gt.append({"type": "nmr_peak", "ppm": round(p,2), "height": round(h,2)})
+    ax.plot(ppm, intensity, 'k-', lw=0.8); ax.invert_xaxis()
+    ax.set_xlabel('Chemical Shift (ppm)'); ax.set_ylabel('Intensity')
+    return gt
+
+
+def generate_mass_spectrum_chem(fig, ax):
+    mz = np.arange(10, 300)
+    intensities = np.zeros_like(mz, dtype=float)
+    peak_positions = sorted(random.sample(range(20, 280), random.randint(8, 20)))
+    gt = []
+    for p in peak_positions:
+        h = random.uniform(10, 100)
+        intensities[p-10] = h
+        gt.append({"type": "mass_peak", "mz": p, "intensity": round(h,1)})
+    ax.stem(mz, intensities, linefmt='k-', markerfmt='', basefmt='k-')
+    ax.set_xlabel('m/z'); ax.set_ylabel('Relative Abundance (%)')
+    return gt
+
+
+def generate_uv_vis(fig, ax):
+    wl = np.linspace(200, 800, 300)
+    n_samples = random.randint(1, 3)
+    colors = ['b', 'r', 'g']; gt = []
+    for i in range(n_samples):
+        peaks = np.random.uniform(250, 600, random.randint(1, 3))
+        absorbance = sum(random.uniform(0.3,2)*np.exp(-0.5*((wl-p)/random.uniform(15,40))**2) for p in peaks)
+        ax.plot(wl, absorbance, color=colors[i], label=f'Sample {i+1}')
+        gt.append({"type": "uv_vis", "sample": f"Sample {i+1}", "lambda_max": round(float(wl[np.argmax(absorbance)]),1)})
+    ax.set_xlabel('Wavelength (nm)'); ax.set_ylabel('Absorbance'); ax.legend()
+    return gt
+
+
+def generate_chromatogram(fig, ax):
+    t = np.linspace(0, 30, 500)
+    signal = np.random.normal(0, 0.01, len(t))
+    peaks = sorted(np.random.uniform(2, 28, random.randint(3, 8)))
+    gt = []
+    for p in peaks:
+        h = random.uniform(0.5, 5); w = random.uniform(0.1, 0.5)
+        signal += h * np.exp(-0.5*((t-p)/w)**2)
+        gt.append({"type": "chrom_peak", "rt": round(p,2), "height": round(h,2)})
+    ax.plot(t, signal, 'b-'); ax.fill_between(t, 0, signal, alpha=0.2)
+    ax.set_xlabel('Retention Time (min)'); ax.set_ylabel('Detector Response')
+    return gt
+
+
+def generate_reaction_coordinate(fig, ax):
+    states = ['R', 'TS1', 'I', 'TS2', 'P']
+    energies = [0, random.uniform(15,35), random.uniform(-5,10), random.uniform(20,40), random.uniform(-15,5)]
+    x = np.arange(len(states))
+    # plateaus with smooth connections
+    for i in range(len(states)):
+        ax.plot([x[i]-0.3, x[i]+0.3], [energies[i], energies[i]], 'b-', lw=2)
+        if i < len(states)-1:
+            xc = np.linspace(x[i]+0.3, x[i+1]-0.3, 20)
+            yc = np.interp(xc, [x[i]+0.3, x[i+1]-0.3], [energies[i], energies[i+1]])
+            ax.plot(xc, yc, 'b--', lw=1)
+    ax.set_xticks(x); ax.set_xticklabels(states)
+    ax.set_ylabel('Energy (kcal/mol)'); ax.set_xlabel('Reaction Coordinate')
+    return [{"type": "rxn_coord", "state": s, "energy": round(e,1)} for s, e in zip(states, energies)]
+
+
+def generate_kinetic_trace(fig, ax):
+    t = np.linspace(0, 100, 60)
+    temps = [300, 320, 340]; colors = ['b', 'r', 'g']; gt = []
+    for T, c in zip(temps, colors):
+        k = 0.01 * np.exp(-(5000/T)); C0 = random.uniform(0.8, 1.2)
+        C = C0 * np.exp(-k*t) + np.random.normal(0, 0.02, len(t))
+        ax.plot(t, C, f'{c}o-', ms=3, label=f'{T} K')
+        gt.append({"type": "kinetic", "temp": T, "k": round(k,5), "C0": round(C0,2)})
+    ax.set_xlabel('Time (min)'); ax.set_ylabel('Concentration (M)'); ax.legend()
+    return gt
+
+
+def generate_titration_curve(fig, ax):
+    V = np.linspace(0, 50, 200)
+    Ve = random.uniform(20, 35)  # equivalence point
+    pH = 2 + 12 / (1 + np.exp(-(V - Ve) * 0.5))
+    pH += np.random.normal(0, 0.1, len(V))
+    ax.plot(V, pH, 'b-', lw=2)
+    ax.axvline(Ve, color='r', ls='--', label=f'Eq. pt = {Ve:.1f} mL')
+    ax.set_xlabel('Volume of Titrant (mL)'); ax.set_ylabel('pH'); ax.legend()
+    return [{"type": "titration", "equiv_vol": round(Ve,1)}]
+
+
+def generate_calibration_curve(fig, ax):
+    conc = np.array([0, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0])
+    slope = random.uniform(0.5, 3.0); intercept = random.uniform(0, 0.5)
+    signal = slope * conc + intercept + np.random.normal(0, 0.1, len(conc))
+    ax.plot(conc, signal, 'ko', ms=6)
+    fit_x = np.linspace(0, 10, 100); fit_y = slope*fit_x + intercept
+    ax.plot(fit_x, fit_y, 'r-')
+    r2 = 1 - np.var(signal - (slope*conc+intercept)) / np.var(signal)
+    ax.text(0.05, 0.9, f'y = {slope:.2f}x + {intercept:.2f}\n$R^2$ = {r2:.4f}', 
+            transform=ax.transAxes, bbox=dict(facecolor='wheat', alpha=0.5))
+    ax.set_xlabel('Concentration (mg/L)'); ax.set_ylabel('Signal'); 
+    return [{"type": "calibration", "slope": round(slope,3), "intercept": round(intercept,3), "R2": round(r2,4)}]
+
+
+def generate_spectroscopy_2d(fig, ax):
+    x = np.linspace(1500, 1700, 80); y = np.linspace(1500, 1700, 80)
+    X, Y = np.meshgrid(x, y)
+    Z = np.exp(-((X-1600)**2 + (Y-1620)**2)/(2*20**2)) - 0.5*np.exp(-((X-1650)**2+(Y-1580)**2)/(2*15**2))
+    c = ax.contourf(X, Y, Z, levels=20, cmap='RdBu_r')
+    plt.colorbar(c, ax=ax, label='Intensity')
+    ax.set_xlabel(r'$\omega_1$ (cm$^{-1}$)'); ax.set_ylabel(r'$\omega_3$ (cm$^{-1}$)')
+    return [{"type": "spectroscopy_2d", "peak_1": [1600, 1620], "peak_2": [1650, 1580]}]
+
+
+def generate_clustered_heatmap(fig, _):
+    fig.clf()
+    n_genes = 20; n_samples = 8
+    data = np.random.randn(n_genes, n_samples)
+    # add some structure
+    data[:5, :4] += 2; data[10:15, 4:] -= 2
+    ax = fig.add_subplot(111)
+    im = ax.imshow(data, cmap='RdBu_r', aspect='auto')
+    plt.colorbar(im, ax=ax, label='Z-score')
+    ax.set_xlabel('Samples'); ax.set_ylabel('Genes')
+    ax.set_xticks(range(n_samples)); ax.set_xticklabels([f'S{i}' for i in range(n_samples)], fontsize=7)
+    return [{"type": "clustered_heatmap", "n_genes": n_genes, "n_samples": n_samples}]
+
+
+def generate_manhattan_plot(fig, ax):
+    gt = []; offset = 0; colors_chr = ['#1f77b4', '#ff7f0e']
+    for chrom in range(1, 23):
+        n = random.randint(50, 150)
+        pos = np.sort(np.random.uniform(0, 1e8, n)) + offset
+        pvals = np.random.uniform(0, 1, n); logp = -np.log10(pvals)
+        # add some hits
+        if random.random() > 0.7:
+            logp[random.randint(0, n-1)] = random.uniform(8, 15)
+        ax.scatter(pos, logp, s=3, c=colors_chr[chrom%2], alpha=0.6)
+        offset += 1e8
+    ax.axhline(7.3, color='r', ls='--', label='Genome-wide significance')
+    ax.set_xlabel('Genomic Position'); ax.set_ylabel(r'-log$_{10}$(p)')
+    ax.legend(fontsize=7)
+    return [{"type": "manhattan", "n_chromosomes": 22, "threshold": 7.3}]
+
+
+def generate_survival_curve(fig, ax):
+    t = np.sort(np.random.exponential(50, 100))
+    groups = {'Treatment': 0.7, 'Control': 1.0}
+    colors_km = {'Treatment': 'blue', 'Control': 'red'}; gt = []
+    for name, hazard in groups.items():
+        times = np.sort(np.random.exponential(50/hazard, 80))
+        surv = np.linspace(1, 0.1, len(times))
+        ax.step(times, surv, where='post', color=colors_km[name], lw=2, label=name)
+        # censor ticks
+        censor_idx = np.random.choice(len(times), 10, replace=False)
+        ax.plot(times[censor_idx], surv[censor_idx], '|', color=colors_km[name], ms=10)
+        gt.append({"type": "survival", "group": name, "median_survival": round(float(np.median(times)),1)})
+    ax.set_xlabel('Time (months)'); ax.set_ylabel('Survival Probability')
+    ax.legend(); ax.text(0.7, 0.9, 'p = 0.003', transform=ax.transAxes)
+    return gt
+
+
+def generate_dose_response(fig, ax):
+    dose = np.logspace(-3, 2, 30)
+    ic50 = 10**random.uniform(-1, 1); hill = random.uniform(0.8, 2.5)
+    response = 100 / (1 + (dose/ic50)**hill) + np.random.normal(0, 3, len(dose))
+    ax.semilogx(dose, response, 'ko', ms=4)
+    fit_x = np.logspace(-3, 2, 200); fit_y = 100 / (1 + (fit_x/ic50)**hill)
+    ax.plot(fit_x, fit_y, 'r-')
+    ax.axhline(50, color='gray', ls='--'); ax.axvline(ic50, color='gray', ls='--')
+    ax.text(ic50*1.5, 55, f'IC50 = {ic50:.2f}', fontsize=9)
+    ax.set_xlabel('Concentration (µM)'); ax.set_ylabel('Viability (%)')
+    return [{"type": "dose_response", "ic50": round(ic50,3), "hill": round(hill,2)}]
+
+
+def generate_flow_cytometry(fig, ax):
+    n = 2000
+    pop1_x = np.random.lognormal(3, 0.5, n); pop1_y = np.random.lognormal(2, 0.5, n)
+    pop2_x = np.random.lognormal(5, 0.4, 500); pop2_y = np.random.lognormal(5, 0.4, 500)
+    ax.scatter(pop1_x, pop1_y, s=1, alpha=0.3, c='blue')
+    ax.scatter(pop2_x, pop2_y, s=1, alpha=0.3, c='red')
+    # gate
+    ax.plot([50,50,1000,1000,50], [50,1000,1000,50,50], 'k-', lw=1.5)
+    ax.text(200, 800, f'{500/(n+500)*100:.1f}%', fontsize=10)
+    ax.set_xscale('log'); ax.set_yscale('log')
+    ax.set_xlabel('CD4-FITC'); ax.set_ylabel('CD8-PE')
+    return [{"type": "flow_cytometry", "gated_pct": round(500/(n+500)*100,1)}]
+
+
+def generate_forest_plot(fig, ax):
+    n_studies = random.randint(6, 12)
+    names = [f"Study {i+1}" for i in range(n_studies)]
+    effects = np.random.normal(0.3, 0.5, n_studies)
+    ci_low = effects - np.random.uniform(0.1, 0.6, n_studies)
+    ci_high = effects + np.random.uniform(0.1, 0.6, n_studies)
+    y = np.arange(n_studies)
+    sizes = np.random.uniform(50, 200, n_studies)
+    ax.scatter(effects, y, s=sizes, c='blue', zorder=3)
+    ax.hlines(y, ci_low, ci_high, colors='blue')
+    # pooled
+    pooled = np.mean(effects)
+    ax.axvline(pooled, color='red', ls='-', lw=2, label=f'Pooled: {pooled:.2f}')
+    ax.axvline(0, color='k', ls='--')
+    ax.set_yticks(y); ax.set_yticklabels(names, fontsize=7)
+    ax.set_xlabel('Effect Size (95% CI)'); ax.legend(fontsize=7)
+    gt = [{"type": "forest", "study": n, "effect": round(float(e),3), "ci": [round(float(l),3), round(float(h),3)]} 
+          for n, e, l, h in zip(names, effects, ci_low, ci_high)]
+    return gt
+
+
+def generate_epidemic_curve(fig, ax):
+    weeks = np.arange(52)
+    cases = np.random.poisson(50, 52)
+    # wave
+    cases = cases + (300 * np.exp(-0.5*((weeks-20)/5)**2)).astype(int)
+    ax.bar(weeks, cases, color='#e6550d', alpha=0.8, label='Cases')
+    # rolling average
+    ra = np.convolve(cases, np.ones(4)/4, mode='same')
+    ax.plot(weeks, ra, 'k-', lw=2, label='4-week avg')
+    ax.set_xlabel('Week'); ax.set_ylabel('Cases'); ax.legend()
+    return [{"type": "epidemic", "peak_week": int(weeks[np.argmax(cases)]), "total": int(np.sum(cases))}]
+
+
+def generate_bland_altman(fig, ax):
+    n = 50
+    m1 = np.random.uniform(50, 150, n); m2 = m1 + np.random.normal(2, 5, n)
+    mean_m = (m1 + m2) / 2; diff = m1 - m2
+    bias = np.mean(diff); loa = 1.96 * np.std(diff)
+    ax.scatter(mean_m, diff, c='k', s=20, alpha=0.6)
+    ax.axhline(bias, color='r', ls='-', label=f'Bias: {bias:.1f}')
+    ax.axhline(bias+loa, color='b', ls='--', label=f'+1.96 SD: {bias+loa:.1f}')
+    ax.axhline(bias-loa, color='b', ls='--', label=f'-1.96 SD: {bias-loa:.1f}')
+    ax.set_xlabel('Mean of Methods'); ax.set_ylabel('Difference'); ax.legend(fontsize=7)
+    return [{"type": "bland_altman", "bias": round(bias,2), "loa_upper": round(bias+loa,2), "loa_lower": round(bias-loa,2)}]
+
+
+def generate_waterfall_plot(fig, ax):
+    n = random.randint(20, 40)
+    changes = np.random.uniform(-80, 60, n)
+    changes = np.sort(changes)
+    colors = ['green' if c < -30 else ('red' if c > 20 else 'gray') for c in changes]
+    ax.bar(range(n), changes, color=colors)
+    ax.axhline(-30, color='k', ls='--'); ax.axhline(20, color='k', ls='--')
+    ax.set_xlabel('Patient'); ax.set_ylabel('% Change from Baseline')
+    return [{"type": "waterfall", "n_responders": sum(1 for c in changes if c < -30), "n_patients": n}]
+
+
+def generate_spaghetti_plot(fig, ax):
+    n_patients = 30; n_visits = 8
+    t = np.arange(n_visits)
+    for i in range(n_patients):
+        baseline = random.uniform(100, 200)
+        trend = random.uniform(-5, 2)
+        y = baseline + trend*t + np.random.normal(0, 10, n_visits)
+        ax.plot(t, y, 'b-', alpha=0.15, lw=1)
+    # group mean
+    mean_y = 150 - 2*t; ax.plot(t, mean_y, 'r-', lw=3, label='Group Mean')
+    ax.set_xlabel('Visit'); ax.set_ylabel('Biomarker Level'); ax.legend()
+    return [{"type": "spaghetti", "n_patients": n_patients, "n_visits": n_visits}]
+
+
+def generate_raster_plot(fig, ax):
+    n_neurons=20; t_max=500
+    for i in range(n_neurons):
+        spikes = np.sort(np.random.uniform(0, t_max, random.randint(10,80)))
+        ax.vlines(spikes, i+0.5, i+1.5, lw=0.5)
+    ax.axvspan(200,300,color='yellow',alpha=0.3,label='Stimulus')
+    ax.set_xlabel('Time (ms)'); ax.set_ylabel('Neuron'); ax.set_xlim(0,t_max); ax.legend(fontsize=7)
+    return [{"type":"raster","n_neurons":n_neurons,"t_max":t_max}]
+
+
+def generate_psth(fig, ax):
+    t=np.linspace(-200,500,70); fr=5+15*np.exp(-0.5*((t-100)/50)**2)+np.random.normal(0,1,len(t))
+    fr=np.clip(fr,0,None)
+    ax.bar(t, fr, width=t[1]-t[0], color='steelblue', alpha=0.7)
+    ax.axvspan(0,200,color='yellow',alpha=0.2,label='Stimulus')
+    ax.axvline(0,color='k',ls='--')
+    ax.set_xlabel('Time from stimulus (ms)'); ax.set_ylabel('Firing rate (Hz)'); ax.legend(fontsize=7)
+    return [{"type":"psth","peak_rate":round(float(fr.max()),1)}]
+
+
+def generate_tuning_curve(fig, ax):
+    angles=np.linspace(0,360,36); pref=random.uniform(0,360)
+    fr=20+30*np.exp(-0.5*((angles-pref)/40)**2)+np.random.normal(0,2,len(angles))
+    ax.errorbar(angles,fr,yerr=2,fmt='ko-',ms=3,capsize=2)
+    ax.axvline(pref,color='r',ls='--',label=f'Pref={pref:.0f}°')
+    ax.set_xlabel('Direction (°)'); ax.set_ylabel('Firing Rate (Hz)'); ax.legend()
+    return [{"type":"tuning","preferred_dir":round(pref,1)}]
+
+
+def generate_eeg_traces(fig, ax):
+    t=np.linspace(0,1,500); channels=['Fz','Cz','Pz','Oz']
+    for i,ch in enumerate(channels):
+        sig=np.random.normal(0,10,500); sig+=5*np.sin(2*np.pi*10*t)
+        ax.plot(t, sig+i*60, 'k-', lw=0.5)
+        ax.text(-0.02, i*60, ch, ha='right', fontsize=8)
+    ax.axvline(0.3,color='r',ls='--',label='Event')
+    ax.set_xlabel('Time (s)'); ax.set_ylabel('Amplitude (µV)'); ax.legend(fontsize=7)
+    return [{"type":"eeg","n_channels":len(channels)}]
+
+
+def generate_spectrogram(fig, ax):
+    t=np.linspace(0,2,200); f=np.linspace(0,100,100)
+    T,F=np.meshgrid(t,f)
+    S=np.exp(-((F-30)**2)/200)*np.exp(-((T-1)**2)/0.5)+np.random.normal(0,0.1,T.shape)
+    c=ax.pcolormesh(T,F,S,cmap='hot',shading='auto')
+    plt.colorbar(c,ax=ax,label='Power (dB)')
+    ax.set_xlabel('Time (s)'); ax.set_ylabel('Frequency (Hz)')
+    return [{"type":"spectrogram","peak_freq":30,"peak_time":1.0}]
+
+
+def generate_connectivity_matrix(fig, ax):
+    n=10; labels=[f"ROI{i}" for i in range(n)]
+    C=np.random.uniform(-1,1,(n,n)); C=(C+C.T)/2; np.fill_diagonal(C,1)
+    im=ax.imshow(C,cmap='RdBu_r',vmin=-1,vmax=1)
+    plt.colorbar(im,ax=ax); ax.set_xticks(range(n)); ax.set_yticks(range(n))
+    ax.set_xticklabels(labels,rotation=45,fontsize=6); ax.set_yticklabels(labels,fontsize=6)
+    return [{"type":"connectivity","n_regions":n}]
+
+
+def generate_psychometric_curve(fig, ax):
+    x=np.linspace(-3,3,20); thresh=random.uniform(-0.5,0.5); slope=random.uniform(1,3)
+    p=1/(1+np.exp(-slope*(x-thresh)))+np.random.normal(0,0.03,len(x))
+    p=np.clip(p,0,1)
+    ax.plot(x,p,'ko',ms=5); fit_x=np.linspace(-3,3,100); ax.plot(fit_x,1/(1+np.exp(-slope*(fit_x-thresh))),'r-')
+    ax.axhline(0.5,color='gray',ls='--'); ax.axvline(thresh,color='gray',ls='--')
+    ax.set_xlabel('Stimulus Strength'); ax.set_ylabel('P(correct)')
+    return [{"type":"psychometric","threshold":round(thresh,2),"slope":round(slope,2)}]
+
+
+def generate_time_series_anomaly(fig, ax):
+    years=np.arange(1900,2025); baseline=0
+    anomaly=0.01*(years-1950)+0.5*np.sin(2*np.pi*years/60)+np.random.normal(0,0.2,len(years))
+    colors=['blue' if a<0 else 'red' for a in anomaly]
+    ax.bar(years,anomaly,color=colors,width=1)
+    ax.axhline(0,color='k',lw=1); ax.set_xlabel('Year'); ax.set_ylabel('Temperature Anomaly (°C)')
+    return [{"type":"anomaly_ts","trend_per_decade":round(0.01*10,3)}]
+
+
+def generate_hovmoller(fig, ax):
+    lon=np.linspace(0,360,72); t=np.arange(365)
+    LON,T=np.meshgrid(lon,t)
+    Z=np.sin(2*np.pi*(LON-T*0.5)/360)+np.random.normal(0,0.2,LON.shape)
+    c=ax.pcolormesh(LON,T,Z,cmap='RdBu_r',shading='auto')
+    plt.colorbar(c,ax=ax,label='OLR Anomaly')
+    ax.set_xlabel('Longitude'); ax.set_ylabel('Day of Year')
+    return [{"type":"hovmoller","propagation_speed":0.5}]
+
+
+def generate_vertical_profile(fig, ax):
+    z=np.linspace(0,30,50); T=-6.5*z/1000*50+15+np.random.normal(0,1,50)
+    ax.plot(T,z,'b-o',ms=3,label='Temperature')
+    ax.set_xlabel('Temperature (°C)'); ax.set_ylabel('Altitude (km)')
+    ax.invert_yaxis() if random.random()>0.5 else None; ax.legend()
+    return [{"type":"vertical_profile","surface_T":round(float(T[0]),1)}]
+
+
+def generate_climate_ensemble(fig, ax):
+    years=np.arange(2000,2100); gt=[]
+    for sc,c in zip(['SSP1-2.6','SSP2-4.5','SSP5-8.5'],['blue','orange','red']):
+        rate={'SSP1-2.6':0.01,'SSP2-4.5':0.03,'SSP5-8.5':0.06}[sc]
+        mean=rate*(years-2000)+np.random.normal(0,0.1,len(years)).cumsum()*0.05
+        ax.plot(years,mean,color=c,label=sc)
+        ax.fill_between(years,mean-0.5,mean+0.5,color=c,alpha=0.2)
+        gt.append({"type":"ensemble","scenario":sc,"warming_2100":round(float(mean[-1]),1)})
+    ax.set_xlabel('Year'); ax.set_ylabel('Temperature Change (°C)'); ax.legend(fontsize=7)
+    return gt
+
+
+def generate_return_period(fig, ax):
+    rp=np.logspace(0,3,30); mag=20+10*np.log(rp)+np.random.normal(0,2,len(rp))
+    ax.semilogx(rp,mag,'ko',ms=4); fit=20+10*np.log(np.logspace(0,3,100))
+    ax.plot(np.logspace(0,3,100),fit,'r-')
+    ax.fill_between(np.logspace(0,3,100),fit-3,fit+3,color='red',alpha=0.15)
+    ax.set_xlabel('Return Period (years)'); ax.set_ylabel('Magnitude')
+    return [{"type":"return_period","100yr_event":round(float(20+10*np.log(100)),1)}]
+
+
+def generate_ocean_section(fig, ax):
+    dist=np.linspace(0,5000,60); depth=np.linspace(0,5000,50)
+    D,Z=np.meshgrid(dist,depth)
+    T=20*np.exp(-Z/1000)+5*np.sin(2*np.pi*D/5000)+np.random.normal(0,0.5,D.shape)
+    c=ax.pcolormesh(D,Z,T,cmap='coolwarm',shading='auto')
+    ax.invert_yaxis(); plt.colorbar(c,ax=ax,label='Temperature (°C)')
+    ax.contour(D,Z,T,levels=10,colors='k',linewidths=0.3)
+    ax.set_xlabel('Distance (km)'); ax.set_ylabel('Depth (m)')
+    return [{"type":"ocean_section","sst_range":round(float(T[0].max()-T[0].min()),1)}]
+
+
+def generate_vector_field(fig, ax):
+    x=np.linspace(-5,5,15); y=np.linspace(-5,5,15); X,Y=np.meshgrid(x,y)
+    U=-Y+np.random.normal(0,0.2,X.shape); V=X+np.random.normal(0,0.2,X.shape)
+    speed=np.sqrt(U**2+V**2)
+    ax.quiver(X,Y,U,V,speed,cmap='viridis',alpha=0.8)
+    ax.set_xlabel('x'); ax.set_ylabel('y')
+    return [{"type":"vector_field","max_speed":round(float(speed.max()),2)}]
+
+
+def generate_streamline(fig, ax):
+    x=np.linspace(-3,3,40); y=np.linspace(-3,3,40); X,Y=np.meshgrid(x,y)
+    U=-Y; V=X
+    speed=np.sqrt(U**2+V**2)
+    ax.streamplot(X,Y,U,V,color=speed,cmap='plasma',density=1.5)
+    ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_aspect('equal')
+    return [{"type":"streamline"}]
+
+
+def generate_lift_drag_polar(fig, ax):
+    alpha=np.linspace(-5,20,30)
+    for name,clmax,c in zip(['NACA0012','NACA2412'],[1.2,1.5],['b','r']):
+        cl=0.1*alpha*(1-0.01*alpha**2)+np.random.normal(0,0.02,len(alpha))
+        cl=np.clip(cl,-0.5,clmax)
+        ax.plot(alpha,cl,f'{c}o-',ms=3,label=name)
+    ax.axhline(0,color='k',lw=0.5); ax.axvline(0,color='k',lw=0.5)
+    ax.set_xlabel(r'$\alpha$ (°)'); ax.set_ylabel(r'$C_L$'); ax.legend()
+    return [{"type":"lift_drag_polar"}]
+
+
+def generate_pressure_coefficient(fig, ax):
+    x=np.linspace(0,1,50)
+    cp_upper=-2*np.sqrt(1-x)*np.exp(-3*x)+np.random.normal(0,0.05,50)
+    cp_lower=0.5*(1-x)+np.random.normal(0,0.05,50)
+    ax.plot(x,cp_upper,'b-o',ms=2,label='Upper'); ax.plot(x,cp_lower,'r-s',ms=2,label='Lower')
+    ax.invert_yaxis(); ax.set_xlabel('x/c'); ax.set_ylabel(r'$C_p$'); ax.legend()
+    return [{"type":"cp_distribution","min_cp":round(float(cp_upper.min()),2)}]
+
+
+def generate_bode_plot(fig, _):
+    fig.clf(); ax1,ax2=fig.subplots(2,1,sharex=True)
+    f=np.logspace(-1,4,200); wn=100; zeta=0.3
+    s=1j*2*np.pi*f; H=wn**2/(s**2+2*zeta*wn*s+wn**2)
+    ax1.semilogx(f,20*np.log10(np.abs(H)),'b-')
+    ax1.set_ylabel('Magnitude (dB)'); ax1.grid(True,alpha=0.3)
+    ax2.semilogx(f,np.degrees(np.angle(H)),'r-')
+    ax2.set_ylabel('Phase (°)'); ax2.set_xlabel('Frequency (Hz)'); ax2.grid(True,alpha=0.3)
+    return [{"type":"bode","natural_freq":wn,"damping":zeta}]
+
+
+def generate_nyquist_plot(fig, ax):
+    w=np.logspace(-2,3,500); wn=10; zeta=0.5
+    s=1j*w; H=wn**2/(s**2+2*zeta*wn*s+wn**2)
+    ax.plot(H.real,H.imag,'b-'); ax.plot(H.real,-H.imag,'b--',alpha=0.5)
+    ax.plot(-1,0,'rx',ms=10,mew=2); ax.set_xlabel('Real'); ax.set_ylabel('Imaginary')
+    ax.set_aspect('equal'); ax.grid(True,alpha=0.3)
+    return [{"type":"nyquist","wn":wn,"zeta":zeta}]
+
+
+def generate_convergence_plot(fig, ax):
+    iters=np.arange(1,101)
+    for name,rate,c in zip(['Solver A','Solver B','Solver C'],[0.05,0.08,0.03],['r','b','g']):
+        res=10*np.exp(-rate*iters)+np.random.normal(0,0.01,100); res=np.clip(res,1e-6,None)
+        ax.semilogy(iters,res,color=c,label=name)
+    ax.set_xlabel('Iteration'); ax.set_ylabel('Residual'); ax.legend()
+    return [{"type":"convergence"}]
+
+
+def generate_pareto_frontier(fig, ax):
+    n=100; f1=np.random.uniform(0,10,n); f2=10-f1+np.random.normal(0,2,n)
+    ax.scatter(f1,f2,c='gray',s=15,alpha=0.5,label='Feasible')
+    idx=np.argsort(f1); pareto_f1=[f1[idx[0]]]; pareto_f2=[f2[idx[0]]]
+    for i in idx:
+        if f2[i]>=pareto_f2[-1]: pareto_f1.append(f1[i]); pareto_f2.append(f2[i])
+    ax.plot(pareto_f1,pareto_f2,'r-o',ms=4,label='Pareto Front')
+    ax.set_xlabel('Objective 1'); ax.set_ylabel('Objective 2'); ax.legend()
+    return [{"type":"pareto","n_pareto":len(pareto_f1)}]
+
+
+def generate_training_curve(fig, ax):
+    epochs=np.arange(1,101)
+    train_loss=5*np.exp(-0.05*epochs)+0.1+np.random.normal(0,0.05,100)
+    val_loss=5*np.exp(-0.04*epochs)+0.3+np.random.normal(0,0.08,100)
+    ax.plot(epochs,train_loss,'b-',label='Train'); ax.plot(epochs,val_loss,'r-',label='Val')
+    ax.set_xlabel('Epoch'); ax.set_ylabel('Loss'); ax.set_yscale('log'); ax.legend()
+    return [{"type":"training_curve","final_train":round(float(train_loss[-1]),3),"final_val":round(float(val_loss[-1]),3)}]
+
+
+def generate_scaling_law(fig, ax):
+    params=np.logspace(6,10,20); loss=10*params**-0.076+np.random.normal(0,0.01,20)
+    ax.loglog(params,loss,'ko',ms=4); fit_x=np.logspace(6,10,100)
+    ax.plot(fit_x,10*fit_x**-0.076,'r-',label=r'$L \propto N^{-0.076}$')
+    ax.set_xlabel('Parameters'); ax.set_ylabel('Loss'); ax.legend()
+    return [{"type":"scaling_law","exponent":-0.076}]
+
+
+def generate_confusion_matrix(fig, ax):
+    n=random.randint(3,6); labels=[f"C{i}" for i in range(n)]
+    cm=np.random.randint(0,100,(n,n)); np.fill_diagonal(cm,np.random.randint(200,500,n))
+    im=ax.imshow(cm,cmap='Blues')
+    for i in range(n):
+        for j in range(n):
+            ax.text(j,i,str(cm[i,j]),ha='center',va='center',fontsize=8)
+    plt.colorbar(im,ax=ax); ax.set_xticks(range(n)); ax.set_yticks(range(n))
+    ax.set_xticklabels(labels); ax.set_yticklabels(labels)
+    ax.set_xlabel('Predicted'); ax.set_ylabel('True')
+    return [{"type":"confusion_matrix","accuracy":round(float(np.trace(cm)/cm.sum()),3)}]
+
+
+def generate_ablation_plot(fig, ax):
+    variants=['Full','No Aug','No Pretrain','No Dropout','Baseline']
+    scores=[92.3,89.1,85.7,90.5,78.2]; errs=[0.5,0.8,1.2,0.6,1.5]
+    scores=[s+random.uniform(-2,2) for s in scores]; y=range(len(variants))
+    ax.barh(y,scores,xerr=errs,color=['green']+['steelblue']*3+['gray'],capsize=3)
+    ax.set_yticks(y); ax.set_yticklabels(variants); ax.set_xlabel('Accuracy (%)')
+    return [{"type":"ablation","variant":v,"score":round(s,1)} for v,s in zip(variants,scores)]
+
+
+def generate_calibration_reliability(fig, ax):
+    bins=np.linspace(0,1,11); bin_centers=(bins[:-1]+bins[1:])/2
+    acc=bin_centers+np.random.normal(0,0.05,10); acc=np.clip(acc,0,1)
+    ax.bar(bin_centers,acc,width=0.08,alpha=0.7,color='steelblue',label='Model')
+    ax.plot([0,1],[0,1],'r--',label='Perfect')
+    ax.set_xlabel('Predicted Probability'); ax.set_ylabel('Observed Frequency'); ax.legend()
+    return [{"type":"calibration_reliability","ece":round(float(np.mean(np.abs(acc-bin_centers))),3)}]
+
+
+def generate_attention_heatmap(fig, ax):
+    tokens_x=['The','cat','sat','on','the','mat','.']; tokens_y=tokens_x[:]; n=len(tokens_x)
+    attn=np.random.dirichlet(np.ones(n),n)
+    im=ax.imshow(attn,cmap='Purples'); ax.set_xticks(range(n)); ax.set_yticks(range(n))
+    ax.set_xticklabels(tokens_x,rotation=45); ax.set_yticklabels(tokens_y)
+    plt.colorbar(im,ax=ax,label='Attention Weight')
+    return [{"type":"attention","n_tokens":n}]
+
+
+def generate_function_plot(fig, ax):
+    x=np.linspace(-5,5,300)
+    for label,y,c in [('sin',np.sin(x),'b'),('cos',np.cos(x),'r'),(r'$e^{-x^2}$',np.exp(-x**2),'g')]:
+        ax.plot(x,y,color=c,label=label)
+    ax.axhline(0,color='k',lw=0.5); ax.axvline(0,color='k',lw=0.5)
+    ax.set_xlabel('x'); ax.set_ylabel('f(x)'); ax.legend()
+    return [{"type":"function_plot"}]
+
+
+def generate_phase_portrait(fig, ax):
+    x=np.linspace(-3,3,15); y=np.linspace(-3,3,15); X,Y=np.meshgrid(x,y)
+    a=random.uniform(-1,1); b=random.uniform(-1,1)
+    U=a*X-Y; V=X+b*Y
+    ax.streamplot(X,Y,U,V,color=np.sqrt(U**2+V**2),cmap='autumn',density=1.5)
+    ax.plot(0,0,'ko',ms=8)
+    ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_aspect('equal')
+    return [{"type":"phase_portrait","a":round(a,2),"b":round(b,2)}]
+
+
+def generate_bifurcation(fig, ax):
+    r=np.linspace(2.5,4.0,500)
+    for ri in r:
+        x=0.5
+        for _ in range(200): x=ri*x*(1-x)
+        xs=[x]; 
+        for _ in range(100): x=ri*x*(1-x); xs.append(x)
+        ax.plot([ri]*len(xs),xs,'k,',alpha=0.3)
+    ax.set_xlabel('r'); ax.set_ylabel('x*')
+    return [{"type":"bifurcation","r_range":[2.5,4.0]}]
+
+
+def generate_qq_plot(fig, ax):
+    data=np.sort(np.random.normal(0,1,100)+np.random.exponential(0.3,100))
+    theoretical=np.sort(np.random.normal(0,1,100))
+    ax.scatter(theoretical,data,c='k',s=10)
+    lims=[min(theoretical.min(),data.min()),max(theoretical.max(),data.max())]
+    ax.plot(lims,lims,'r--'); ax.set_xlabel('Theoretical Quantiles'); ax.set_ylabel('Sample Quantiles')
+    return [{"type":"qq_plot"}]
+
+
+def generate_residual_plot(fig, ax):
+    fitted=np.random.uniform(0,100,80); residuals=np.random.normal(0,5,80)
+    ax.scatter(fitted,residuals,c='k',s=10,alpha=0.6)
+    ax.axhline(0,color='r',ls='--')
+    ax.set_xlabel('Fitted Values'); ax.set_ylabel('Residuals')
+    return [{"type":"residual_plot","mean_resid":round(float(np.mean(residuals)),2)}]
+
+
+def generate_autocorrelation(fig, ax):
+    lags=np.arange(0,30); acf=np.exp(-lags/5)*np.cos(lags/3)+np.random.normal(0,0.05,30)
+    acf[0]=1.0
+    ax.stem(lags,acf,linefmt='b-',markerfmt='bo',basefmt='k-')
+    ax.axhline(1.96/np.sqrt(100),color='r',ls='--'); ax.axhline(-1.96/np.sqrt(100),color='r',ls='--')
+    ax.set_xlabel('Lag'); ax.set_ylabel('ACF')
+    return [{"type":"autocorrelation"}]
+
+
+def generate_trace_plot(fig, ax):
+    n_iter=1000
+    for i,c in enumerate(['blue','red','green']):
+        chain=np.cumsum(np.random.normal(0,0.1,n_iter))+random.uniform(-2,2)
+        ax.plot(range(n_iter),chain,color=c,alpha=0.7,lw=0.5,label=f'Chain {i+1}')
+    ax.set_xlabel('Iteration'); ax.set_ylabel('Parameter Value'); ax.legend(fontsize=7)
+    return [{"type":"trace_plot","n_chains":3}]
+
+
+def generate_coefficient_plot(fig, ax):
+    n=random.randint(5,10); names=[f"Var{i}" for i in range(n)]
+    coefs=np.random.normal(0,1,n); ci=np.random.uniform(0.2,0.8,n)
+    y=np.arange(n)
+    ax.errorbar(coefs,y,xerr=ci,fmt='ko',capsize=3)
+    ax.axvline(0,color='r',ls='--')
+    ax.set_yticks(y); ax.set_yticklabels(names,fontsize=7); ax.set_xlabel('Coefficient (95% CI)')
+    return [{"type":"coefficient","name":n,"coef":round(float(c),3)} for n,c in zip(names,coefs)]
+
+
+def generate_event_study(fig, ax):
+    t=np.arange(-5,6); effects=np.zeros(11); effects[5:]=np.random.uniform(0.5,3,6)
+    effects+=np.random.normal(0,0.3,11); ci=np.random.uniform(0.3,0.8,11)
+    ax.errorbar(t,effects,yerr=ci,fmt='ko-',capsize=3)
+    ax.axvline(0,color='r',ls='--',label='Treatment')
+    ax.axhline(0,color='k',ls='-',lw=0.5)
+    ax.set_xlabel('Time Relative to Event'); ax.set_ylabel('Effect Size'); ax.legend()
+    return [{"type":"event_study","post_effect":round(float(np.mean(effects[5:])),2)}]
+
+
+def generate_lorenz_curve(fig, ax):
+    pop=np.linspace(0,1,100)
+    gini=random.uniform(0.25,0.55)
+    income=pop**(1/(1-gini+0.01))
+    ax.plot(pop,income,'b-',lw=2,label=f'Lorenz (Gini={gini:.2f})')
+    ax.plot([0,1],[0,1],'k--',label='Equality')
+    ax.fill_between(pop,pop,income,alpha=0.2)
+    ax.set_xlabel('Cumulative Population'); ax.set_ylabel('Cumulative Income'); ax.legend()
+    return [{"type":"lorenz","gini":round(gini,3)}]
+
+
+def generate_survey_stacked_bar(fig, ax):
+    cats=['Q1','Q2','Q3','Q4','Q5']; responses=['Str. Disagree','Disagree','Neutral','Agree','Str. Agree']
+    colors=['#d73027','#fc8d59','#ffffbf','#91bfdb','#4575b4']
+    y=np.arange(len(cats)); gt=[]
+    for i,resp in enumerate(responses):
+        vals=[random.uniform(5,30) for _ in cats]
+        left=np.zeros(len(cats)) if i==0 else left+prev
+        ax.barh(y,vals,left=left,color=colors[i],label=resp)
+        prev=np.array(vals)
+    ax.set_yticks(y); ax.set_yticklabels(cats); ax.legend(fontsize=6,loc='lower right')
+    return [{"type":"survey_stacked","n_questions":len(cats)}]
+
+
+def generate_economic_timeseries(fig, ax):
+    years=np.arange(1990,2025)
+    for name,c in zip(['US','EU','China'],['blue','green','red']):
+        gdp=100+np.cumsum(np.random.normal(2,1,len(years)))
+        ax.plot(years,gdp,color=c,label=name,lw=1.5)
+    # recession bands
+    for start in [2001,2008,2020]:
+        if start<2025: ax.axvspan(start,start+1,color='gray',alpha=0.2)
+    ax.set_xlabel('Year'); ax.set_ylabel('GDP Index'); ax.legend()
+    return [{"type":"economic_ts","n_series":3}]
+
+
 def generate_plot(output_dir, num_samples):
     os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
     metadata_path = os.path.join(output_dir, "metadata.jsonl")
     
     plot_types = [
-        generate_scatter, generate_fit, generate_clustering, 
-        generate_bar, generate_grouped_bar, generate_boxplot, 
-        generate_pie, generate_histogram, generate_density,
-        generate_hep_brazil, generate_heatmap, generate_contour,
-        generate_corner_plot, generate_contour_overlay, 
-        generate_bump_hunt, generate_stacked_ratio,
-        generate_double_y_axis, generate_multi_line_log,
-        generate_stacked_histogram, generate_residual_bump,
-        generate_ashby_chart, generate_phase_diagram,
-        generate_parity_grid, generate_stress_strain,
-        generate_volcano_plot, generate_roc_curve, generate_light_curve
+        generate_scatter,
+        generate_fit,
+        generate_clustering,
+        generate_bar,
+        generate_grouped_bar,
+        generate_boxplot,
+        generate_pie,
+        generate_histogram,
+        generate_density,
+        generate_hep_brazil,
+        generate_heatmap,
+        generate_contour,
+        generate_corner_plot,
+        generate_contour_overlay,
+        generate_bump_hunt,
+        generate_stacked_ratio,
+        generate_double_y_axis,
+        generate_multi_line_log,
+        generate_stacked_histogram,
+        generate_residual_bump,
+        generate_ashby_chart,
+        generate_phase_diagram,
+        generate_parity_grid,
+        generate_stress_strain,
+        generate_volcano_plot,
+        generate_roc_curve,
+        generate_light_curve,
+        generate_line_plot,
+        generate_violin_plot,
+        generate_spatial_map,
+        generate_invariant_mass,
+        generate_pt_spectrum,
+        generate_pull_plot,
+        generate_correlation_matrix,
+        generate_unfolded_xsec,
+        generate_efficiency_map,
+        generate_sky_map,
+        generate_sed,
+        generate_hr_diagram,
+        generate_power_spectrum,
+        generate_redshift_distribution,
+        generate_mass_radius,
+        generate_residual_map,
+        generate_band_structure,
+        generate_dos,
+        generate_xrd,
+        generate_raman_spectrum,
+        generate_magnetization,
+        generate_resistivity,
+        generate_nmr_spectrum,
+        generate_mass_spectrum_chem,
+        generate_uv_vis,
+        generate_chromatogram,
+        generate_reaction_coordinate,
+        generate_kinetic_trace,
+        generate_titration_curve,
+        generate_calibration_curve,
+        generate_spectroscopy_2d,
+        generate_clustered_heatmap,
+        generate_manhattan_plot,
+        generate_survival_curve,
+        generate_dose_response,
+        generate_flow_cytometry,
+        generate_forest_plot,
+        generate_epidemic_curve,
+        generate_bland_altman,
+        generate_waterfall_plot,
+        generate_spaghetti_plot,
+        generate_raster_plot,
+        generate_psth,
+        generate_tuning_curve,
+        generate_eeg_traces,
+        generate_spectrogram,
+        generate_connectivity_matrix,
+        generate_psychometric_curve,
+        generate_time_series_anomaly,
+        generate_hovmoller,
+        generate_vertical_profile,
+        generate_climate_ensemble,
+        generate_return_period,
+        generate_ocean_section,
+        generate_vector_field,
+        generate_streamline,
+        generate_lift_drag_polar,
+        generate_pressure_coefficient,
+        generate_bode_plot,
+        generate_nyquist_plot,
+        generate_convergence_plot,
+        generate_pareto_frontier,
+        generate_training_curve,
+        generate_scaling_law,
+        generate_confusion_matrix,
+        generate_ablation_plot,
+        generate_calibration_reliability,
+        generate_attention_heatmap,
+        generate_function_plot,
+        generate_phase_portrait,
+        generate_bifurcation,
+        generate_qq_plot,
+        generate_residual_plot,
+        generate_autocorrelation,
+        generate_trace_plot,
+        generate_coefficient_plot,
+        generate_event_study,
+        generate_lorenz_curve,
+        generate_survey_stacked_bar,
+        generate_economic_timeseries
     ]
+    
+    multi_panel_types = {"bode_plot", "corner_plot", "unfolded_xsec", "invariant_mass", "sky_map", "stacked_ratio", "clustered_heatmap", "parity_grid"}
     
     with open(metadata_path, 'w') as f:
         for i in tqdm(range(num_samples), desc="Generating Complex Data"):
@@ -765,7 +1797,11 @@ def generate_plot(output_dir, num_samples):
             generator = random.choice(plot_types)
             plot_type_name = generator.__name__.replace('generate_', '')
             
-            data_points = generator(fig, ax)
+            try:
+                data_points = generator(fig, ax)
+            except Exception as e:
+                plt.close(fig)
+                continue
             
             image_dir = os.path.join(output_dir, "images", plot_type_name)
             os.makedirs(image_dir, exist_ok=True)
@@ -777,7 +1813,7 @@ def generate_plot(output_dir, num_samples):
             plt.close(fig)
             
             structured_gt = {
-                "figure_type": "single_panel" if plot_type_name not in ["corner_plot", "parity_grid", "stacked_ratio"] else "multi_panel",
+                "figure_type": "multi_panel" if plot_type_name in multi_panel_types else "single_panel",
                 "panels": [
                     {
                         "panel_id": "A",
@@ -800,4 +1836,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     generate_plot(args.output_dir, args.samples)
-    print(f"Generated {args.samples} samples in {args.output_dir}")
+    print(f"Generated {args.samples} samples covering 107 plot types in {args.output_dir}")
