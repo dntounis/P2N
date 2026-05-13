@@ -668,6 +668,79 @@ def generate_stress_strain(fig, ax):
     gt = [{"type": "stress_strain", "yield_stress": float(yield_stress), "uts": float(stress[uts_idx])}]
     return gt
 
+def generate_volcano_plot(fig, ax):
+    n_genes = 500
+    logFC = np.random.normal(0, 2, n_genes)
+    p_vals = np.random.uniform(0, 1, n_genes)
+    neg_log10_p = -np.log10(p_vals)
+    
+    # add some true positives
+    logFC = np.append(logFC, np.random.normal(4, 1, 50))
+    neg_log10_p = np.append(neg_log10_p, np.random.normal(5, 1, 50))
+    logFC = np.append(logFC, np.random.normal(-4, 1, 50))
+    neg_log10_p = np.append(neg_log10_p, np.random.normal(5, 1, 50))
+    
+    sig_up = (logFC > 2) & (neg_log10_p > 2)
+    sig_down = (logFC < -2) & (neg_log10_p > 2)
+    not_sig = ~(sig_up | sig_down)
+    
+    ax.scatter(logFC[not_sig], neg_log10_p[not_sig], color='gray', alpha=0.5, s=10)
+    ax.scatter(logFC[sig_up], neg_log10_p[sig_up], color='red', alpha=0.7, s=15, label='Up')
+    ax.scatter(logFC[sig_down], neg_log10_p[sig_down], color='blue', alpha=0.7, s=15, label='Down')
+    
+    ax.axvline(-2, color='k', linestyle='--')
+    ax.axvline(2, color='k', linestyle='--')
+    ax.axhline(2, color='k', linestyle='--')
+    
+    ax.set_xlabel(r'Log$_2$ Fold Change')
+    ax.set_ylabel(r'-Log$_{10}$ P-value')
+    ax.legend()
+    random_style(ax)
+    
+    return [{"type": "volcano_summary", "up_regulated": int(np.sum(sig_up)), "down_regulated": int(np.sum(sig_down))}]
+
+def generate_roc_curve(fig, ax):
+    x = np.linspace(0, 1, 50)
+    models = ['Model A', 'Model B', 'Baseline']
+    colors = ['r', 'b', 'k']
+    
+    gt = []
+    for m, c in zip(models, colors):
+        if m == 'Baseline':
+            y = x
+            auc = 0.50
+            ls = '--'
+        else:
+            power = random.uniform(2, 5)
+            y = x**(1/power)
+            auc = 1 - (1 / (power + 1))
+            ls = '-'
+        
+        ax.plot(x, y, color=c, linestyle=ls, label=f'{m} (AUC = {auc:.2f})')
+        gt.append({"type": "roc_curve", "model": m, "auc": round(auc, 2)})
+        
+    ax.plot([0, 1], [0, 1], 'k--', alpha=0.5)
+    ax.set_xlabel('False Positive Rate')
+    ax.set_ylabel('True Positive Rate')
+    ax.legend()
+    random_style(ax)
+    return gt
+
+def generate_light_curve(fig, ax):
+    time = np.linspace(59000, 59100, 60)
+    # transient event
+    mag = 20 - 5 * np.exp(-0.5 * ((time - 59050) / 5)**2) + np.random.normal(0, 0.2, len(time))
+    err = np.random.uniform(0.1, 0.3, len(time))
+    
+    ax.errorbar(time, mag, yerr=err, fmt='o', color='green', markersize=4)
+    
+    ax.invert_yaxis() # Magnitudes are inverted
+    ax.set_xlabel('Time (MJD)')
+    ax.set_ylabel('Apparent Magnitude (g-band)')
+    random_style(ax)
+    
+    return [{"type": "light_curve", "peak_time": 59050, "peak_mag": round(float(np.min(mag)), 2)}]
+
 def generate_plot(output_dir, num_samples):
     os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
     metadata_path = os.path.join(output_dir, "metadata.jsonl")
@@ -682,7 +755,8 @@ def generate_plot(output_dir, num_samples):
         generate_double_y_axis, generate_multi_line_log,
         generate_stacked_histogram, generate_residual_bump,
         generate_ashby_chart, generate_phase_diagram,
-        generate_parity_grid, generate_stress_strain
+        generate_parity_grid, generate_stress_strain,
+        generate_volcano_plot, generate_roc_curve, generate_light_curve
     ]
     
     with open(metadata_path, 'w') as f:
@@ -702,7 +776,17 @@ def generate_plot(output_dir, num_samples):
             plt.savefig(image_path, bbox_inches='tight', dpi=random.randint(80, 150))
             plt.close(fig)
             
-            ground_truth = {"gt_parse": {"data": data_points}}
+            structured_gt = {
+                "figure_type": "single_panel" if plot_type_name not in ["corner_plot", "parity_grid", "stacked_ratio"] else "multi_panel",
+                "panels": [
+                    {
+                        "panel_id": "A",
+                        "plot_type": plot_type_name,
+                        "data_series": data_points
+                    }
+                ]
+            }
+            ground_truth = {"gt_parse": structured_gt}
             metadata_entry = {
                 "file_name": f"images/{plot_type_name}/{image_filename}",
                 "ground_truth": json.dumps(ground_truth)
