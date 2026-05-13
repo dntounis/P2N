@@ -2006,7 +2006,202 @@ def generate_ecdf(fig, ax):
     ax.axhline(0.5, color='gray', ls='--', alpha=0.5)
     return gt
 
-def generate_plot(output_dir, num_samples, degrade_fraction=0.3):
+def generate_known_function(fig, ax):
+    """Plot an exact mathematical function for analytically verifiable extraction."""
+    func_type = random.choice(['exponential', 'power_law', 'gaussian', 'polynomial', 'damped_oscillation'])
+    x = np.linspace(random.uniform(0, 2), random.uniform(5, 20), random.randint(30, 80))
+    noise_level = random.uniform(0, 0.1)
+    
+    if func_type == 'exponential':
+        A = round(random.uniform(1, 10), 2); tau = round(random.uniform(0.5, 5), 2)
+        y = A * np.exp(-x / tau)
+        params = {"function": "exponential_decay", "A": A, "tau": tau}
+        eq_text = f'$y = {A}\\cdot e^{{-x/{tau}}}$'
+    elif func_type == 'power_law':
+        A = round(random.uniform(0.5, 5), 2); n = round(random.uniform(0.5, 3), 2)
+        y = A * x**n
+        params = {"function": "power_law", "A": A, "n": n}
+        eq_text = f'$y = {A}\\cdot x^{{{n}}}$'
+    elif func_type == 'gaussian':
+        A = round(random.uniform(1, 10), 2); mu = round(random.uniform(3, 15), 2)
+        sigma = round(random.uniform(0.5, 3), 2)
+        y = A * np.exp(-0.5 * ((x - mu) / sigma)**2)
+        params = {"function": "gaussian", "A": A, "mu": mu, "sigma": sigma}
+        eq_text = f'$y = {A}\\cdot e^{{-(x-{mu})^2/2\\cdot{sigma}^2}}$'
+    elif func_type == 'polynomial':
+        degree = random.randint(2, 4)
+        coeffs = [round(random.uniform(-2, 2), 2) for _ in range(degree + 1)]
+        y = sum(c * x**i for i, c in enumerate(coeffs))
+        params = {"function": f"polynomial_deg{degree}", "coefficients": coeffs}
+        eq_text = f'Polynomial (deg {degree})'
+    else:  # damped_oscillation
+        A = round(random.uniform(1, 5), 2); gamma = round(random.uniform(0.1, 1), 2)
+        omega = round(random.uniform(1, 5), 2)
+        y = A * np.exp(-gamma * x) * np.cos(omega * x)
+        params = {"function": "damped_oscillation", "A": A, "gamma": gamma, "omega": omega}
+        eq_text = f'$y = {A}\\cdot e^{{-{gamma}x}}\\cos({omega}x)$'
+    
+    y_noisy = y + np.random.normal(0, noise_level * np.abs(y).max(), len(y))
+    
+    if random.random() > 0.5:
+        ax.plot(x, y_noisy, 'ko', ms=3, label='Data')
+        ax.plot(x, y, 'r-', lw=1.5, label='Fit')
+    else:
+        ax.plot(x, y_noisy, 'b-', lw=1.5)
+    
+    if random.random() > 0.4:
+        ax.text(0.05, 0.9, eq_text, transform=ax.transAxes, fontsize=9,
+                bbox=dict(facecolor='wheat', alpha=0.5))
+    ax.set_xlabel('x'); ax.set_ylabel('f(x)')
+    if random.random() > 0.7: ax.legend()
+    random_style(ax)
+    return [{"type": "known_function", **params, "noise": round(noise_level, 3)}]
+
+def generate_dense_scatter(fig, ax):
+    """Extreme: 5000-15000 overplotted points."""
+    n = random.randint(5000, 15000)
+    x = np.random.normal(0, 1, n); y = 0.5*x + np.random.normal(0, 1, n)
+    ax.scatter(x, y, s=1, alpha=0.05, c='k')
+    r = round(float(np.corrcoef(x, y)[0, 1]), 3)
+    ax.set_xlabel('X'); ax.set_ylabel('Y')
+    ax.text(0.05, 0.9, f'r = {r}', transform=ax.transAxes)
+    return [{"type": "dense_scatter", "n_points": n, "correlation": r}]
+
+def generate_sparse_plot(fig, ax):
+    """Extreme: only 2-5 data points."""
+    n = random.randint(2, 5)
+    x = np.sort(np.random.uniform(0, 10, n))
+    y = np.random.uniform(1, 50, n)
+    err = np.random.uniform(1, 10, n)
+    ax.errorbar(x, y, yerr=err, fmt='ko', ms=8, capsize=5)
+    ax.set_xlabel(random.choice(['Mass (GeV)', 'Energy (eV)', 'Time (s)']))
+    ax.set_ylabel(random.choice(['Rate', 'Cross-section', 'Counts']))
+    random_style(ax)
+    return [{"type": "sparse", "x": [round(float(v), 2) for v in x],
+             "y": [round(float(v), 2) for v in y],
+             "yerr": [round(float(v), 2) for v in err]}]
+
+def generate_huge_dynamic_range(fig, ax):
+    """Extreme: values spanning many orders of magnitude."""
+    x = np.logspace(-5, 5, 40)
+    y = 1e10 * x**-2.5 + np.random.lognormal(0, 0.3, len(x)) * 1e3
+    ax.loglog(x, y, 'ko-', ms=3)
+    ax.set_xlabel(r'$p_T$ [GeV]'); ax.set_ylabel('d$N$/d$p_T$ [GeV$^{-1}$]')
+    random_style(ax)
+    return [{"type": "huge_range", "x_range_decades": 10, "y_range_decades": round(float(np.log10(y.max()/y.min())), 1)}]
+
+def generate_notick_plot(fig, ax):
+    """Extreme: plot with NO tick labels — model must infer from gridlines or give up."""
+    x = np.linspace(0, 10, 50)
+    y = np.sin(x) + np.random.normal(0, 0.1, 50)
+    ax.plot(x, y, 'b-', lw=2)
+    ax.set_xticklabels([]); ax.set_yticklabels([])
+    ax.grid(True, alpha=0.3)
+    return [{"type": "no_ticks", "note": "tick_labels_removed"}]
+
+def generate_extreme_aspect(fig, _):
+    """Extreme: very wide or very tall aspect ratio."""
+    if random.random() > 0.5:
+        fig.set_size_inches(14, 3)  # very wide
+    else:
+        fig.set_size_inches(3, 14)  # very tall
+    ax = fig.add_subplot(111)
+    x = np.linspace(0, 50, 100); y = np.sin(x)
+    ax.plot(x, y, 'r-')
+    ax.set_xlabel('x'); ax.set_ylabel('y')
+    return [{"type": "extreme_aspect"}]
+
+def generate_rotated_labels(fig, ax):
+    """Plot with rotated tick labels (common in real papers)."""
+    cats = [f"Category_{chr(65+i)}_{''.join(random.choices('abcdef', k=5))}" for i in range(8)]
+    vals = [random.uniform(10, 100) for _ in cats]
+    ax.bar(range(len(cats)), vals, color=plt.cm.Set2(np.linspace(0, 1, len(cats))))
+    ax.set_xticks(range(len(cats)))
+    angle = random.choice([30, 45, 60, 90])
+    ax.set_xticklabels(cats, rotation=angle, ha='right', fontsize=7)
+    ax.set_ylabel('Value')
+    return [{"type": "rotated_labels", "rotation": angle,
+             "categories": cats, "values": [round(v, 1) for v in vals]}]
+
+def generate_broken_axis(fig, _):
+    """Plot with a broken/discontinuous y-axis."""
+    fig.clf()
+    ax1 = fig.add_subplot(211); ax2 = fig.add_subplot(212)
+    x = np.arange(10); y = [5, 7, 6, 8, 100, 105, 98, 102, 7, 6]
+    ax1.bar(x, y, color='steelblue'); ax2.bar(x, y, color='steelblue')
+    ax1.set_ylim(90, 110); ax2.set_ylim(0, 15)
+    ax1.spines['bottom'].set_visible(False); ax2.spines['top'].set_visible(False)
+    ax1.tick_params(bottom=False); ax1.set_xticklabels([])
+    # break marks
+    d = 0.015
+    kwargs = dict(transform=ax1.transAxes, color='k', clip_on=False)
+    ax1.plot((-d, +d), (-d, +d), **kwargs); ax1.plot((1-d, 1+d), (-d, +d), **kwargs)
+    kwargs.update(transform=ax2.transAxes)
+    ax2.plot((-d, +d), (1-d, 1+d), **kwargs); ax2.plot((1-d, 1+d), (1-d, 1+d), **kwargs)
+    return [{"type": "broken_axis", "values": y}]
+
+def generate_3d_bar(fig, _):
+    """3D perspective bar chart (notoriously hard to read)."""
+    fig.clf(); ax = fig.add_subplot(111, projection='3d')
+    x = np.arange(5); y = np.arange(4)
+    X, Y = np.meshgrid(x, y)
+    Z = np.random.uniform(5, 50, X.shape)
+    dx = dy = 0.6
+    colors = plt.cm.viridis(Z.flatten() / Z.max())
+    ax.bar3d(X.flatten(), Y.flatten(), np.zeros_like(Z).flatten(),
+             dx, dy, Z.flatten(), color=colors, alpha=0.8)
+    ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Value')
+    return [{"type": "3d_bar", "values": Z.tolist()}]
+
+
+# --- Auxiliary sub-task extractors ---
+
+def extract_axis_info(fig_meta):
+    """Extract axis metadata from a figure for the axis-reading sub-task."""
+    return {
+        "task_type": "axis_info",
+        "x_label": fig_meta.get("x_label", ""),
+        "y_label": fig_meta.get("y_label", ""),
+        "x_scale": fig_meta.get("x_scale", "linear"),
+        "y_scale": fig_meta.get("y_scale", "linear"),
+        "x_inverted": fig_meta.get("x_inverted", False),
+        "y_inverted": fig_meta.get("y_inverted", False),
+    }
+
+def extract_element_count(fig_meta):
+    """Extract structural element counts for the detection sub-task."""
+    return {
+        "task_type": "element_count",
+        "n_series": fig_meta.get("n_series", 1),
+        "has_legend": fig_meta.get("has_legend", False),
+        "has_colorbar": fig_meta.get("has_colorbar", False),
+        "has_error_bars": fig_meta.get("has_error_bars", False),
+        "has_grid": fig_meta.get("has_grid", False),
+        "plot_type": fig_meta.get("plot_type", "unknown"),
+    }
+
+def capture_fig_meta(fig, ax, plot_type_name):
+    """Capture axis and element metadata from a rendered figure."""
+    meta = {"plot_type": plot_type_name}
+    try:
+        meta["x_label"] = ax.get_xlabel() or ""
+        meta["y_label"] = ax.get_ylabel() or ""
+        meta["x_scale"] = ax.get_xscale()
+        meta["y_scale"] = ax.get_yscale()
+        meta["x_inverted"] = bool(ax.get_xlim()[0] > ax.get_xlim()[1])
+        meta["y_inverted"] = bool(ax.get_ylim()[0] > ax.get_ylim()[1])
+        meta["has_legend"] = bool(ax.get_legend() is not None)
+        meta["has_grid"] = bool(any(l.get_visible() for l in ax.get_xgridlines()))
+        meta["n_series"] = int(len(ax.get_lines()) + len(ax.collections))
+        meta["has_error_bars"] = bool(any(isinstance(c, plt.matplotlib.container.ErrorbarContainer) 
+                                     for c in ax.containers)) if hasattr(ax, 'containers') else False
+        meta["has_colorbar"] = bool(len(fig.axes) > len([a for a in fig.axes if a.get_label() != '<colorbar>']))
+    except Exception:
+        pass
+    return meta
+
+
+def generate_plot(output_dir, num_samples, degrade_fraction=0.3, aux_tasks=False):
     os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
     metadata_path = os.path.join(output_dir, "metadata.jsonl")
     
@@ -2132,7 +2327,16 @@ def generate_plot(output_dir, num_samples, degrade_fraction=0.3):
         generate_swarm_plot,
         generate_pair_plot,
         generate_step_histogram,
-        generate_ecdf
+        generate_ecdf,
+        generate_known_function,
+        generate_dense_scatter,
+        generate_sparse_plot,
+        generate_huge_dynamic_range,
+        generate_notick_plot,
+        generate_extreme_aspect,
+        generate_rotated_labels,
+        generate_broken_axis,
+        generate_3d_bar,
     ]
     
     multi_panel_types = {"bode_plot", "corner_plot", "unfolded_xsec", "invariant_mass", "sky_map", "stacked_ratio", "clustered_heatmap", "parity_grid"}
@@ -2148,6 +2352,13 @@ def generate_plot(output_dir, num_samples, degrade_fraction=0.3):
             except Exception as e:
                 plt.close(fig)
                 continue
+            
+            # Capture figure metadata for auxiliary tasks before saving
+            try:
+                main_ax = fig.axes[0] if fig.axes else ax
+                fig_meta = capture_fig_meta(fig, main_ax, plot_type_name)
+            except Exception:
+                fig_meta = {"plot_type": plot_type_name}
             
             image_dir = os.path.join(output_dir, "images", plot_type_name)
             os.makedirs(image_dir, exist_ok=True)
@@ -2184,6 +2395,24 @@ def generate_plot(output_dir, num_samples, degrade_fraction=0.3):
                 "ground_truth": json.dumps(ground_truth)
             }
             f.write(json.dumps(metadata_entry) + "\n")
+            
+            # Emit auxiliary sub-task entries for the same image
+            if aux_tasks:
+                ax_info = extract_axis_info(fig_meta)
+                if ax_info:
+                    aux_entry = {
+                        "file_name": f"images/{plot_type_name}/{image_filename}",
+                        "ground_truth": json.dumps({"gt_parse": ax_info, "task": "axis_info"})
+                    }
+                    f.write(json.dumps(aux_entry) + "\n")
+                
+                elem_info = extract_element_count(fig_meta)
+                if elem_info:
+                    aux_entry = {
+                        "file_name": f"images/{plot_type_name}/{image_filename}",
+                        "ground_truth": json.dumps({"gt_parse": elem_info, "task": "element_count"})
+                    }
+                    f.write(json.dumps(aux_entry) + "\n")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate synthetic scientific plots.")
@@ -2191,7 +2420,11 @@ if __name__ == "__main__":
     parser.add_argument("--samples", type=int, default=100, help="Number of samples to generate")
     parser.add_argument("--degrade_fraction", type=float, default=0.3,
                         help="Fraction of images to degrade (0.0-1.0). Simulates scans, photocopies, aging.")
+    parser.add_argument("--aux_tasks", action="store_true", default=False,
+                        help="Emit auxiliary sub-task metadata (axis reading, element counting) for each image.")
     args = parser.parse_args()
     
-    generate_plot(args.output_dir, args.samples, args.degrade_fraction)
-    print(f"Generated {args.samples} samples ({args.degrade_fraction*100:.0f}%% degraded) in {args.output_dir}")
+    generate_plot(args.output_dir, args.samples, args.degrade_fraction, args.aux_tasks)
+    suffix = " + aux tasks" if args.aux_tasks else ""
+    print(f"Generated {args.samples} samples ({args.degrade_fraction*100:.0f}% degraded{suffix}) in {args.output_dir}")
+
