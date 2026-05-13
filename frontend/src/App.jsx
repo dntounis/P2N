@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, FileJson, ArrowRight, Download, RefreshCw } from 'lucide-react';
+import { UploadCloud, FileJson, ArrowRight, Download, RefreshCw, Table as TableIcon } from 'lucide-react';
+import DataTable from './DataTable';
 import './index.css';
 
 function App() {
@@ -9,6 +10,7 @@ function App() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [activeTab, setActiveTab] = useState('table');
   
   const fileInputRef = useRef(null);
 
@@ -198,21 +200,43 @@ function App() {
           {/* Right Panel: Results */}
           <div className="glass-panel" style={{display: 'flex', flexDirection: 'column'}}>
             <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem'}}>
-              <FileJson className="upload-icon" size={24} style={{margin: 0}} />
               <h2 style={{fontSize: '1.5rem', fontWeight: 600}}>Structured Output</h2>
             </div>
             
             {result ? (
-              <div className="json-viewer">
-                <button className="download-btn" onClick={downloadJson}>
-                  <Download size={16} /> Download JSON
-                </button>
-                <pre dangerouslySetInnerHTML={{ __html: highlightJson(result) }} />
-              </div>
+              <>
+                <div className="tabs">
+                  <button 
+                    className={`tab-btn ${activeTab === 'table' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('table')}
+                  >
+                    <TableIcon size={16} style={{display: 'inline', verticalAlign: 'middle', marginRight: '4px'}} /> 
+                    Data Tables
+                  </button>
+                  <button 
+                    className={`tab-btn ${activeTab === 'json' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('json')}
+                  >
+                    <FileJson size={16} style={{display: 'inline', verticalAlign: 'middle', marginRight: '4px'}} /> 
+                    Raw JSON
+                  </button>
+                </div>
+
+                {activeTab === 'table' ? (
+                  <DataTable data={result} />
+                ) : (
+                  <div className="json-viewer">
+                    <button className="download-btn" onClick={downloadJson}>
+                      <Download size={16} /> Download JSON
+                    </button>
+                    <pre dangerouslySetInnerHTML={{ __html: highlightJson(result) }} />
+                  </div>
+                )}
+              </>
             ) : (
               <div style={{flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', textAlign: 'center', padding: '2rem'}}>
                 <FileJson size={48} style={{opacity: 0.2, marginBottom: '1rem'}} />
-                <p>Upload a plot and click "Extract Data" to see the generated JSON.</p>
+                <p>Upload a plot and click "Extract Data" to see the generated data.</p>
               </div>
             )}
           </div>
