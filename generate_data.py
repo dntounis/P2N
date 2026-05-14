@@ -1,5 +1,12 @@
 import os
 import io
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import json
 import random
 import argparse
@@ -731,8 +738,6 @@ def generate_parity_grid(fig, _):
         ax.set_ylim(0, 400)
         
         gt.append({"type": "parity_plot", "model": models[i], "R2": round(r2, 2), "MAE": round(mae, 2)})
-        
-    plt.tight_layout()
     return gt
 
 def generate_stress_strain(fig, ax):
