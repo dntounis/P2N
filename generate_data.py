@@ -2240,6 +2240,7 @@ def capture_fig_meta(fig, ax, plot_type_name):
 
 
 def generate_plot(output_dir, num_samples, degrade_fraction=0.3, aux_tasks=False):
+    global plot_types, multi_panel_types
     os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
     metadata_path = os.path.join(output_dir, "metadata.jsonl")
     
@@ -2382,7 +2383,7 @@ def generate_plot(output_dir, num_samples, degrade_fraction=0.3, aux_tasks=False
     # Define the worker initialization to pass global variables if needed, 
     # but since it's a Linux fork (usually), globals are inherited. We'll pass explicit args.
     
-    tasks = [(i, output_dir, degrade_fraction, aux_tasks, plot_types, multi_panel_types) for i in range(num_samples)]
+    tasks = [(i, output_dir, degrade_fraction, aux_tasks) for i in range(num_samples)]
     
     num_cores = multiprocessing.cpu_count()
     print(f"Generating data using {num_cores} CPU cores in parallel...")
@@ -2396,7 +2397,7 @@ def generate_plot(output_dir, num_samples, degrade_fraction=0.3, aux_tasks=False
                     f.write(line + "\n")
 
 def _generate_single_worker(args):
-    i, output_dir, degrade_fraction, aux_tasks, plot_types, multi_panel_types = args
+    i, output_dir, degrade_fraction, aux_tasks = args
     result_lines = []
     
     # Need to set random seed per worker so they don't all generate the same data
@@ -2430,6 +2431,8 @@ def _generate_single_worker(args):
     elif style_choice != 'default':
         plt.style.use(style_choice)
         
+    plt.rcParams['legend.loc'] = random.choice(['upper left', 'upper right', 'lower left', 'lower right'])
+    
     fig, ax = plt.subplots(figsize=(random.uniform(6.0, 9.0), random.uniform(6.0, 9.0)))
     generator = random.choice(plot_types)
     plot_type_name = generator.__name__.replace('generate_', '')
