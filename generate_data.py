@@ -192,8 +192,7 @@ def generate_fit(fig, ax):
                 verticalalignment='top', bbox=props)
     
     random_style(ax)
-    if random.random() > 0.5:
-        if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    if random.random() > 0.5 and ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
         
     gt = [{"type": "fit_data", "x": round(float(x), 2), "y": round(float(y), 2)} for x, y in zip(x_vals, y_obs)]
     gt.append({"type": "fit_params", "a": round(a, 3), "b": round(b, 3)})
@@ -297,8 +296,7 @@ def generate_histogram(fig, ax):
             gt.append({"type": "histogram_bin", "dist": f"Dist {i+1}", "bin_start": round(float(bin_edges[j]), 2), 
                        "bin_end": round(float(bin_edges[j+1]), 2), "count": int(counts[j])})
             
-    if num_dists > 1:
-        if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    if num_dists > 1 and ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     random_style(ax)
     return gt
 
@@ -933,7 +931,8 @@ def generate_pt_spectrum(fig, ax):
     mc = 1e6 * pt**-4.5; data_vals = np.random.poisson(mc.astype(int).clip(1))
     ax.errorbar(pt, data_vals, yerr=np.sqrt(data_vals), fmt='ko', ms=3, label='Data')
     ax.plot(pt, mc, 'r-', label='MC'); ax.set_xscale('log'); ax.set_yscale('log')
-    ax.set_xlabel(r'$p_T$ [GeV]'); ax.set_ylabel('Events'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel(r'$p_T$ [GeV]'); ax.set_ylabel('Events')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "pt_spectrum", "pt_min": round(float(pt[0]),1), "pt_max": round(float(pt[-1]),1)}]
 
 
@@ -1021,7 +1020,8 @@ def generate_hr_diagram(fig, ax):
     ax.plot(ms_temp, ms_lum, 'r-', lw=2, label='Main Sequence')
     ax.set_xscale('log'); ax.set_yscale('log')
     ax.invert_xaxis()  # convention: hot stars left
-    ax.set_xlabel('Temperature (K)'); ax.set_ylabel(r'Luminosity ($L_\odot$)'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Temperature (K)'); ax.set_ylabel(r'Luminosity ($L_\odot$)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "hr_diagram", "n_stars": n}]
 
 
@@ -1034,7 +1034,8 @@ def generate_power_spectrum(fig, ax):
     ax.errorbar(ell[::10], dll[::10], yerr=dll_err[::10], fmt='k.', ms=2, alpha=0.5)
     ax.plot(ell, dll, 'r-', label='Best fit')
     ax.set_xlabel(r'Multipole $\ell$'); ax.set_ylabel(r'$D_\ell$ [$\mu K^2$]')
-    ax.set_xscale('log'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xscale('log')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "power_spectrum", "ell_max": int(ell[-1])}]
 
 
@@ -1043,7 +1044,8 @@ def generate_redshift_distribution(fig, ax):
     n1 = 200*z**2*np.exp(-z/0.5); n2 = 100*z**2*np.exp(-z/0.8)
     ax.bar(z, n1, width=z[1]-z[0], alpha=0.6, color='blue', label='Photometric')
     ax.step(z, n2, color='red', lw=2, label='Spectroscopic')
-    ax.set_xlabel('Redshift z'); ax.set_ylabel('N(z)'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Redshift z'); ax.set_ylabel('N(z)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "redshift_dist", "z_peak_phot": round(float(z[np.argmax(n1)]),2)}]
 
 
@@ -1054,7 +1056,8 @@ def generate_mass_radius(fig, ax):
     ax.scatter(m, r, c=colors, s=15, alpha=0.7)
     ax.plot(m, m**0.8, 'k--', label=r'$R \propto M^{0.8}$')
     ax.set_xscale('log'); ax.set_yscale('log')
-    ax.set_xlabel(r'Mass ($M_\odot$)'); ax.set_ylabel(r'Radius ($R_\odot$)'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel(r'Mass ($M_\odot$)'); ax.set_ylabel(r'Radius ($R_\odot$)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "mass_radius", "n_objects": len(m)}]
 
 
@@ -1078,7 +1081,8 @@ def generate_band_structure(fig, ax):
     for xv, lbl in zip([0, 1, 2, 3], [r'$\Gamma$', 'X', 'M', r'$\Gamma$']):
         ax.axvline(xv, color='k', lw=0.5)
     ax.set_xticks([0, 1, 2, 3]); ax.set_xticklabels([r'$\Gamma$', 'X', 'M', r'$\Gamma$'])
-    ax.set_ylabel('Energy (eV)'); ax.set_xlim(0, 3); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_ylabel('Energy (eV)'); ax.set_xlim(0, 3)
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "band_structure", "n_bands": 6, "fermi_level": 0}]
 
 
@@ -1090,7 +1094,8 @@ def generate_dos(fig, ax):
     ax.fill_betweenx(E, 0, p_dos, alpha=0.5, color='red', label='p')
     ax.fill_betweenx(E, 0, d_dos, alpha=0.5, color='green', label='d')
     ax.axhline(0, color='k', ls='--', label=r'$E_F$')
-    ax.set_ylabel('Energy (eV)'); ax.set_xlabel('DOS (states/eV)'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_ylabel('Energy (eV)'); ax.set_xlabel('DOS (states/eV)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "dos", "e_range": [-8, 8]}]
 
 
@@ -1120,7 +1125,8 @@ def generate_raman_spectrum(fig, ax):
         offset = i * 500
         ax.plot(wavenumber, intensity*(1+0.1*i) + offset + np.random.normal(0,20,len(wavenumber)), 
                 color=colors[i], label=f'Sample {i+1}')
-    ax.set_xlabel(r'Wavenumber (cm$^{-1}$)'); ax.set_ylabel('Intensity (a.u.)'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel(r'Wavenumber (cm$^{-1}$)'); ax.set_ylabel('Intensity (a.u.)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "raman", "n_peaks": len(peaks)}]
 
 
@@ -1130,7 +1136,8 @@ def generate_magnetization(fig, ax):
     M_up = Ms * np.tanh((H - Hc) * 3); M_down = Ms * np.tanh((H + Hc) * 3)
     ax.plot(H, M_up, 'b-', label='Forward'); ax.plot(H, M_down, 'r-', label='Reverse')
     ax.axhline(0, color='k', lw=0.5); ax.axvline(0, color='k', lw=0.5)
-    ax.set_xlabel('H (T)'); ax.set_ylabel(r'M ($\mu_B$/atom)'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('H (T)'); ax.set_ylabel(r'M ($\mu_B$/atom)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "magnetization", "Ms": round(Ms,2), "Hc": round(Hc,2)}]
 
 
@@ -1142,7 +1149,8 @@ def generate_resistivity(fig, ax):
     rho = np.clip(rho, 0, None)
     ax.plot(T, rho, 'k-', lw=1.5)
     ax.axvline(Tc, color='r', ls='--', label=f'$T_c$ = {Tc:.0f} K')
-    ax.set_xlabel('Temperature (K)'); ax.set_ylabel(r'$\rho$ (m$\Omega$ cm)'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Temperature (K)'); ax.set_ylabel(r'$\rho$ (m$\Omega$ cm)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "resistivity", "Tc": round(Tc,1)}]
 
 
@@ -1183,7 +1191,8 @@ def generate_uv_vis(fig, ax):
         absorbance = sum(random.uniform(0.3,2)*np.exp(-0.5*((wl-p)/random.uniform(15,40))**2) for p in peaks)
         ax.plot(wl, absorbance, color=colors[i], label=f'Sample {i+1}')
         gt.append({"type": "uv_vis", "sample": f"Sample {i+1}", "lambda_max": round(float(wl[np.argmax(absorbance)]),1)})
-    ax.set_xlabel('Wavelength (nm)'); ax.set_ylabel('Absorbance'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Wavelength (nm)'); ax.set_ylabel('Absorbance')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return gt
 
 
@@ -1225,7 +1234,8 @@ def generate_kinetic_trace(fig, ax):
         C = C0 * np.exp(-k*t) + np.random.normal(0, 0.02, len(t))
         ax.plot(t, C, f'{c}o-', ms=3, label=f'{T} K')
         gt.append({"type": "kinetic", "temp": T, "k": round(k,5), "C0": round(C0,2)})
-    ax.set_xlabel('Time (min)'); ax.set_ylabel('Concentration (M)'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Time (min)'); ax.set_ylabel('Concentration (M)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return gt
 
 
@@ -1236,7 +1246,8 @@ def generate_titration_curve(fig, ax):
     pH += np.random.normal(0, 0.1, len(V))
     ax.plot(V, pH, 'b-', lw=2)
     ax.axvline(Ve, color='r', ls='--', label=f'Eq. pt = {Ve:.1f} mL')
-    ax.set_xlabel('Volume of Titrant (mL)'); ax.set_ylabel('pH'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Volume of Titrant (mL)'); ax.set_ylabel('pH')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "titration", "equiv_vol": round(Ve,1)}]
 
 
@@ -1354,7 +1365,8 @@ def generate_forest_plot(fig, ax):
     ax.axvline(pooled, color='red', ls='-', lw=2, label=f'Pooled: {pooled:.2f}')
     ax.axvline(0, color='k', ls='--')
     ax.set_yticks(y); ax.set_yticklabels(names, fontsize=7)
-    ax.set_xlabel('Effect Size (95% CI)'); if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Effect Size (95% CI)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     gt = [{"type": "forest", "study": n, "effect": round(float(e),3), "ci": [round(float(l),3), round(float(h),3)]} 
           for n, e, l, h in zip(names, effects, ci_low, ci_high)]
     return gt
@@ -1369,7 +1381,8 @@ def generate_epidemic_curve(fig, ax):
     # rolling average
     ra = np.convolve(cases, np.ones(4)/4, mode='same')
     ax.plot(weeks, ra, 'k-', lw=2, label='4-week avg')
-    ax.set_xlabel('Week'); ax.set_ylabel('Cases'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Week'); ax.set_ylabel('Cases')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "epidemic", "peak_week": int(weeks[np.argmax(cases)]), "total": int(np.sum(cases))}]
 
 
@@ -1382,7 +1395,8 @@ def generate_bland_altman(fig, ax):
     ax.axhline(bias, color='r', ls='-', label=f'Bias: {bias:.1f}')
     ax.axhline(bias+loa, color='b', ls='--', label=f'+1.96 SD: {bias+loa:.1f}')
     ax.axhline(bias-loa, color='b', ls='--', label=f'-1.96 SD: {bias-loa:.1f}')
-    ax.set_xlabel('Mean of Methods'); ax.set_ylabel('Difference'); if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Mean of Methods'); ax.set_ylabel('Difference')
+    if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "bland_altman", "bias": round(bias,2), "loa_upper": round(bias+loa,2), "loa_lower": round(bias-loa,2)}]
 
 
@@ -1407,7 +1421,8 @@ def generate_spaghetti_plot(fig, ax):
         ax.plot(t, y, 'b-', alpha=0.15, lw=1)
     # group mean
     mean_y = 150 - 2*t; ax.plot(t, mean_y, 'r-', lw=3, label='Group Mean')
-    ax.set_xlabel('Visit'); ax.set_ylabel('Biomarker Level'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Visit'); ax.set_ylabel('Biomarker Level')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type": "spaghetti", "n_patients": n_patients, "n_visits": n_visits}]
 
 
@@ -1417,7 +1432,8 @@ def generate_raster_plot(fig, ax):
         spikes = np.sort(np.random.uniform(0, t_max, random.randint(10,80)))
         ax.vlines(spikes, i+0.5, i+1.5, lw=0.5)
     ax.axvspan(200,300,color='yellow',alpha=0.3,label='Stimulus')
-    ax.set_xlabel('Time (ms)'); ax.set_ylabel('Neuron'); ax.set_xlim(0,t_max); if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Time (ms)'); ax.set_ylabel('Neuron'); ax.set_xlim(0,t_max)
+    if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"raster","n_neurons":n_neurons,"t_max":t_max}]
 
 
@@ -1427,7 +1443,8 @@ def generate_psth(fig, ax):
     ax.bar(t, fr, width=t[1]-t[0], color='steelblue', alpha=0.7)
     ax.axvspan(0,200,color='yellow',alpha=0.2,label='Stimulus')
     ax.axvline(0,color='k',ls='--')
-    ax.set_xlabel('Time from stimulus (ms)'); ax.set_ylabel('Firing rate (Hz)'); if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Time from stimulus (ms)'); ax.set_ylabel('Firing rate (Hz)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"psth","peak_rate":round(float(fr.max()),1)}]
 
 
@@ -1436,7 +1453,8 @@ def generate_tuning_curve(fig, ax):
     fr=20+30*np.exp(-0.5*((angles-pref)/40)**2)+np.random.normal(0,2,len(angles))
     ax.errorbar(angles,fr,yerr=2,fmt='ko-',ms=3,capsize=2)
     ax.axvline(pref,color='r',ls='--',label=f'Pref={pref:.0f}°')
-    ax.set_xlabel('Direction (°)'); ax.set_ylabel('Firing Rate (Hz)'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Direction (°)'); ax.set_ylabel('Firing Rate (Hz)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"tuning","preferred_dir":round(pref,1)}]
 
 
@@ -1447,7 +1465,8 @@ def generate_eeg_traces(fig, ax):
         ax.plot(t, sig+i*60, 'k-', lw=0.5)
         ax.text(-0.02, i*60, ch, ha='right', fontsize=8)
     ax.axvline(0.3,color='r',ls='--',label='Event')
-    ax.set_xlabel('Time (s)'); ax.set_ylabel('Amplitude (µV)'); if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Time (s)'); ax.set_ylabel('Amplitude (µV)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"eeg","n_channels":len(channels)}]
 
 
@@ -1503,7 +1522,8 @@ def generate_vertical_profile(fig, ax):
     z=np.linspace(0,30,50); T=-6.5*z/1000*50+15+np.random.normal(0,1,50)
     ax.plot(T,z,'b-o',ms=3,label='Temperature')
     ax.set_xlabel('Temperature (°C)'); ax.set_ylabel('Altitude (km)')
-    ax.invert_yaxis() if random.random()>0.5 else None; if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.invert_yaxis() if random.random()>0.5 else None
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"vertical_profile","surface_T":round(float(T[0]),1)}]
 
 
@@ -1515,7 +1535,8 @@ def generate_climate_ensemble(fig, ax):
         ax.plot(years,mean,color=c,label=sc)
         ax.fill_between(years,mean-0.5,mean+0.5,color=c,alpha=0.2)
         gt.append({"type":"ensemble","scenario":sc,"warming_2100":round(float(mean[-1]),1)})
-    ax.set_xlabel('Year'); ax.set_ylabel('Temperature Change (°C)'); if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Year'); ax.set_ylabel('Temperature Change (°C)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return gt
 
 
@@ -1564,7 +1585,8 @@ def generate_lift_drag_polar(fig, ax):
         cl=np.clip(cl,-0.5,clmax)
         ax.plot(alpha,cl,f'{c}o-',ms=3,label=name)
     ax.axhline(0,color='k',lw=0.5); ax.axvline(0,color='k',lw=0.5)
-    ax.set_xlabel(r'$\alpha$ (°)'); ax.set_ylabel(r'$C_L$'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel(r'$\alpha$ (°)'); ax.set_ylabel(r'$C_L$')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"lift_drag_polar"}]
 
 
@@ -1573,7 +1595,8 @@ def generate_pressure_coefficient(fig, ax):
     cp_upper=-2*np.sqrt(1-x)*np.exp(-3*x)+np.random.normal(0,0.05,50)
     cp_lower=0.5*(1-x)+np.random.normal(0,0.05,50)
     ax.plot(x,cp_upper,'b-o',ms=2,label='Upper'); ax.plot(x,cp_lower,'r-s',ms=2,label='Lower')
-    ax.invert_yaxis(); ax.set_xlabel('x/c'); ax.set_ylabel(r'$C_p$'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.invert_yaxis(); ax.set_xlabel('x/c'); ax.set_ylabel(r'$C_p$')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"cp_distribution","min_cp":round(float(cp_upper.min()),2)}]
 
 
@@ -1602,7 +1625,8 @@ def generate_convergence_plot(fig, ax):
     for name,rate,c in zip(['Solver A','Solver B','Solver C'],[0.05,0.08,0.03],['r','b','g']):
         res=10*np.exp(-rate*iters)+np.random.normal(0,0.01,100); res=np.clip(res,1e-6,None)
         ax.semilogy(iters,res,color=c,label=name)
-    ax.set_xlabel('Iteration'); ax.set_ylabel('Residual'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Iteration'); ax.set_ylabel('Residual')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"convergence"}]
 
 
@@ -1613,7 +1637,8 @@ def generate_pareto_frontier(fig, ax):
     for i in idx:
         if f2[i]>=pareto_f2[-1]: pareto_f1.append(f1[i]); pareto_f2.append(f2[i])
     ax.plot(pareto_f1,pareto_f2,'r-o',ms=4,label='Pareto Front')
-    ax.set_xlabel('Objective 1'); ax.set_ylabel('Objective 2'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Objective 1'); ax.set_ylabel('Objective 2')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"pareto","n_pareto":len(pareto_f1)}]
 
 
@@ -1622,7 +1647,8 @@ def generate_training_curve(fig, ax):
     train_loss=5*np.exp(-0.05*epochs)+0.1+np.random.normal(0,0.05,100)
     val_loss=5*np.exp(-0.04*epochs)+0.3+np.random.normal(0,0.08,100)
     ax.plot(epochs,train_loss,'b-',label='Train'); ax.plot(epochs,val_loss,'r-',label='Val')
-    ax.set_xlabel('Epoch'); ax.set_ylabel('Loss'); ax.set_yscale('log'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Epoch'); ax.set_ylabel('Loss'); ax.set_yscale('log')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"training_curve","final_train":round(float(train_loss[-1]),3),"final_val":round(float(val_loss[-1]),3)}]
 
 
@@ -1630,7 +1656,8 @@ def generate_scaling_law(fig, ax):
     params=np.logspace(6,10,20); loss=10*params**-0.076+np.random.normal(0,0.01,20)
     ax.loglog(params,loss,'ko',ms=4); fit_x=np.logspace(6,10,100)
     ax.plot(fit_x,10*fit_x**-0.076,'r-',label=r'$L \propto N^{-0.076}$')
-    ax.set_xlabel('Parameters'); ax.set_ylabel('Loss'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Parameters'); ax.set_ylabel('Loss')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"scaling_law","exponent":-0.076}]
 
 
@@ -1661,7 +1688,8 @@ def generate_calibration_reliability(fig, ax):
     acc=bin_centers+np.random.normal(0,0.05,10); acc=np.clip(acc,0,1)
     ax.bar(bin_centers,acc,width=0.08,alpha=0.7,color='steelblue',label='Model')
     ax.plot([0,1],[0,1],'r--',label='Perfect')
-    ax.set_xlabel('Predicted Probability'); ax.set_ylabel('Observed Frequency'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Predicted Probability'); ax.set_ylabel('Observed Frequency')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"calibration_reliability","ece":round(float(np.mean(np.abs(acc-bin_centers))),3)}]
 
 
@@ -1679,7 +1707,8 @@ def generate_function_plot(fig, ax):
     for label,y,c in [('sin',np.sin(x),'b'),('cos',np.cos(x),'r'),(r'$e^{-x^2}$',np.exp(-x**2),'g')]:
         ax.plot(x,y,color=c,label=label)
     ax.axhline(0,color='k',lw=0.5); ax.axvline(0,color='k',lw=0.5)
-    ax.set_xlabel('x'); ax.set_ylabel('f(x)'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('x'); ax.set_ylabel('f(x)')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"function_plot"}]
 
 
@@ -1736,7 +1765,8 @@ def generate_trace_plot(fig, ax):
     for i,c in enumerate(['blue','red','green']):
         chain=np.cumsum(np.random.normal(0,0.1,n_iter))+random.uniform(-2,2)
         ax.plot(range(n_iter),chain,color=c,alpha=0.7,lw=0.5,label=f'Chain {i+1}')
-    ax.set_xlabel('Iteration'); ax.set_ylabel('Parameter Value'); if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Iteration'); ax.set_ylabel('Parameter Value')
+    if ax.get_legend_handles_labels()[1]: ax.legend(fontsize=7, loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"trace_plot","n_chains":3}]
 
 
@@ -1756,7 +1786,8 @@ def generate_event_study(fig, ax):
     ax.errorbar(t,effects,yerr=ci,fmt='ko-',capsize=3)
     ax.axvline(0,color='r',ls='--',label='Treatment')
     ax.axhline(0,color='k',ls='-',lw=0.5)
-    ax.set_xlabel('Time Relative to Event'); ax.set_ylabel('Effect Size'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Time Relative to Event'); ax.set_ylabel('Effect Size')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"event_study","post_effect":round(float(np.mean(effects[5:])),2)}]
 
 
@@ -1767,7 +1798,8 @@ def generate_lorenz_curve(fig, ax):
     ax.plot(pop,income,'b-',lw=2,label=f'Lorenz (Gini={gini:.2f})')
     ax.plot([0,1],[0,1],'k--',label='Equality')
     ax.fill_between(pop,pop,income,alpha=0.2)
-    ax.set_xlabel('Cumulative Population'); ax.set_ylabel('Cumulative Income'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Cumulative Population'); ax.set_ylabel('Cumulative Income')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"lorenz","gini":round(gini,3)}]
 
 
@@ -1792,7 +1824,8 @@ def generate_economic_timeseries(fig, ax):
     # recession bands
     for start in [2001,2008,2020]:
         if start<2025: ax.axvspan(start,start+1,color='gray',alpha=0.2)
-    ax.set_xlabel('Year'); ax.set_ylabel('GDP Index'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Year'); ax.set_ylabel('GDP Index')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return [{"type":"economic_ts","n_series":3}]
 
 def generate_bubble_chart(fig, ax):
@@ -1993,7 +2026,8 @@ def generate_step_histogram(fig, ax):
         gt.append({"type": "step_hist", "process": f"Process {i+1}", "mean": round(mu,1), "entries": len(data)})
     if random.random() > 0.5: ax.set_yscale('log')
     ax.set_xlabel(random.choice([r'$m_{jj}$ [GeV]', 'Energy [keV]', 'ADC counts']))
-    ax.set_ylabel('Events / bin'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_ylabel('Events / bin')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     return gt
 
 def generate_ecdf(fig, ax):
@@ -2005,7 +2039,8 @@ def generate_ecdf(fig, ax):
         ecdf = np.arange(1, len(data)+1) / len(data)
         ax.step(data, ecdf, color=colors[i], lw=1.5, label=f'Sample {i+1}')
         gt.append({"type": "ecdf", "sample": f"Sample {i+1}", "median": round(float(np.median(data)),1)})
-    ax.set_xlabel('Value'); ax.set_ylabel('ECDF'); if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    ax.set_xlabel('Value'); ax.set_ylabel('ECDF')
+    if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     ax.axhline(0.5, color='gray', ls='--', alpha=0.5)
     return gt
 
@@ -2056,7 +2091,7 @@ def generate_known_function(fig, ax):
         ax.text(0.05, 0.9, eq_text, transform=ax.transAxes, fontsize=9,
                 bbox=dict(facecolor='wheat', alpha=0.5))
     ax.set_xlabel('x'); ax.set_ylabel('f(x)')
-    if random.random() > 0.7: if ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
+    if random.random() > 0.7 and ax.get_legend_handles_labels()[1]: ax.legend(loc=random.choice(['upper left', 'upper right', 'lower left', 'lower right']))
     random_style(ax)
     return [{"type": "known_function", **params, "noise": round(noise_level, 3)}]
 
