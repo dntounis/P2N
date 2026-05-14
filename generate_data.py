@@ -2387,8 +2387,7 @@ def generate_plot(output_dir, num_samples, degrade_fraction=0.3, aux_tasks=False
     num_cores = multiprocessing.cpu_count()
     print(f"Generating data using {num_cores} CPU cores in parallel...")
     
-    chunk_size = max(1, num_samples // (num_cores * 4))
-    if chunk_size > 100: chunk_size = 100 # cap to avoid memory spikes
+    chunk_size = 5 # Strict small chunksize so tqdm updates constantly!
     
     with open(metadata_path, 'a') as f:
         with multiprocessing.Pool(processes=num_cores) as pool:
