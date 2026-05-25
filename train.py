@@ -2,10 +2,25 @@ import os
 import argparse
 import json
 import torch
+from torch.utils.data import random_split
 from transformers import VisionEncoderDecoderModel, DonutProcessor, Seq2SeqTrainer, Seq2SeqTrainingArguments
-from datasets import load_dataset, load_from_disk
+from datasets import load_from_disk
+from dataset import P2NMetadataDataset, load_p2n_imagefolder
 
-def train(dataset_path, output_dir, epochs, max_steps, batch_size, learning_rate, max_length, gradient_accumulation_steps, preprocessed_path=None):
+def train(
+    dataset_path,
+    output_dir,
+    epochs,
+    max_steps,
+    batch_size,
+    learning_rate,
+    max_length,
+    gradient_accumulation_steps,
+    preprocessed_path=None,
+    on_the_fly=False,
+    torchvision_decode=False,
+    cuda_jpeg_decode=False,
+):
     # Load model and processor
     model_id = "naver-clova-ix/donut-base"
     if preprocessed_path:
@@ -26,15 +41,33 @@ def train(dataset_path, output_dir, epochs, max_steps, batch_size, learning_rate
     # Model configuration for generation
     model.config.pad_token_id = processor.tokenizer.pad_token_id
     model.config.decoder_start_token_id = processor.tokenizer.convert_tokens_to_ids(["<s_p2n>"])[0]
-    model.config.max_length = max_length
 
     if preprocessed_path:
         print(f"Loading preprocessed dataset from {preprocessed_path}...")
         train_dataset = load_from_disk(os.path.join(preprocessed_path, "train"))
         eval_path = os.path.join(preprocessed_path, "eval")
         eval_dataset = load_from_disk(eval_path) if os.path.exists(eval_path) else None
+    elif on_the_fly:
+        full_dataset = P2NMetadataDataset(
+            dataset_path,
+            processor,
+            max_length=max_length,
+            use_torchvision_decode=torchvision_decode,
+            cuda_jpeg_decode=cuda_jpeg_decode,
+        )
+        eval_size = max(1, int(len(full_dataset) * 0.1)) if len(full_dataset) > 1 else 0
+        train_size = len(full_dataset) - eval_size
+        if eval_size:
+            train_dataset, eval_dataset = random_split(
+                full_dataset,
+                [train_size, eval_size],
+                generator=torch.Generator().manual_seed(42),
+            )
+        else:
+            train_dataset = full_dataset
+            eval_dataset = None
     else:
-        dataset = load_dataset("imagefolder", data_dir=dataset_path)
+        dataset = load_p2n_imagefolder(dataset_path)
 
         if "train" in dataset:
             split = dataset["train"].train_test_split(test_size=0.1, seed=42)
@@ -81,8 +114,9 @@ def train(dataset_path, output_dir, epochs, max_steps, batch_size, learning_rate
             eval_dataset = eval_dataset.map(preprocess, remove_columns=eval_dataset.column_names,
                                             writer_batch_size=50)
 
-    train_dataset.set_format("torch")
-    if eval_dataset:
+    if hasattr(train_dataset, "set_format"):
+        train_dataset.set_format("torch")
+    if eval_dataset and hasattr(eval_dataset, "set_format"):
         eval_dataset.set_format("torch")
 
     # Training arguments — tuned for 50K dataset scale
@@ -137,11 +171,18 @@ if __name__ == "__main__":
     parser.add_argument("--max_steps", type=int, default=-1, help="Max training steps (useful for smoke tests)")
     parser.add_argument("--batch_size", type=int, default=2, help="Per-device batch size")
     parser.add_argument("--learning_rate", type=float, default=2e-5, help="Learning rate")
-    parser.add_argument("--max_length", type=int, default=1536, help="Max decoder sequence length")
+    parser.add_argument("--max_length", type=int, default=512, help="Max decoder sequence length")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8, help="Gradient accumulation steps")
     parser.add_argument("--preprocessed_path", type=str, default=None,
                         help="Path to preprocessed dataset (from preprocess_data.py). Skips on-the-fly preprocessing.")
+    parser.add_argument("--on_the_fly", action="store_true",
+                        help="Preprocess directly in the training dataloader instead of building an Arrow cache.")
+    parser.add_argument("--torchvision_decode", action="store_true",
+                        help="Use torchvision image decoding for JPEG inputs when --on_the_fly is set.")
+    parser.add_argument("--cuda_jpeg_decode", action="store_true",
+                        help="Use torchvision CUDA JPEG decode when --on_the_fly and --torchvision_decode are set.")
     args = parser.parse_args()
 
     train(args.dataset_path, args.output_dir, args.epochs, args.max_steps, args.batch_size,
-          args.learning_rate, args.max_length, args.gradient_accumulation_steps, args.preprocessed_path)
+          args.learning_rate, args.max_length, args.gradient_accumulation_steps, args.preprocessed_path,
+          args.on_the_fly, args.torchvision_decode, args.cuda_jpeg_decode)

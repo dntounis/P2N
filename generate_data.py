@@ -2244,7 +2244,15 @@ def capture_fig_meta(fig, ax, plot_type_name):
     return meta
 
 
-def generate_plot(output_dir, num_samples, degrade_fraction=0.3, aux_tasks=False, num_cpus=None):
+def generate_plot(
+    output_dir,
+    num_samples,
+    degrade_fraction=0.3,
+    aux_tasks=False,
+    num_cpus=None,
+    image_format="jpg",
+    jpeg_quality=95,
+):
     global plot_types, multi_panel_types
     os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
     metadata_path = os.path.join(output_dir, "metadata.jsonl")
@@ -2388,21 +2396,24 @@ def generate_plot(output_dir, num_samples, degrade_fraction=0.3, aux_tasks=False
     # Define the worker initialization to pass global variables if needed, 
     # but since it's a Linux fork (usually), globals are inherited. We'll pass explicit args.
     
-    tasks = [(i, output_dir, degrade_fraction, aux_tasks) for i in range(num_samples)]
+    tasks = [
+        (i, output_dir, degrade_fraction, aux_tasks, image_format, jpeg_quality)
+        for i in range(num_samples)
+    ]
     
     num_cores = num_cpus if num_cpus else len(os.sched_getaffinity(0))
     print(f"Generating data using {num_cores} CPU cores in parallel...")
     
     chunk_size = 5 # Strict small chunksize so tqdm updates constantly!
     
-    with open(metadata_path, 'a') as f:
+    with open(metadata_path, 'w') as f:
         with multiprocessing.Pool(processes=num_cores) as pool:
             for result_lines in tqdm(pool.imap_unordered(_generate_single_worker, tasks, chunksize=chunk_size), total=num_samples, desc="Generating Complex Data"):
                 for line in result_lines:
                     f.write(line + "\n")
 
 def _generate_single_worker(args):
-    i, output_dir, degrade_fraction, aux_tasks = args
+    i, output_dir, degrade_fraction, aux_tasks, image_format, jpeg_quality = args
     result_lines = []
     
     # Need to set random seed per worker so they don't all generate the same data
@@ -2455,9 +2466,21 @@ def _generate_single_worker(args):
         fig_meta = {"plot_type": plot_type_name}
     image_dir = os.path.join(output_dir, "images", plot_type_name)
     os.makedirs(image_dir, exist_ok=True)
-    image_filename = f"image_{i:05d}.png"
+    image_ext = "jpg" if image_format in ("jpg", "jpeg") else "png"
+    image_filename = f"image_{i:05d}.{image_ext}"
     image_path = os.path.join(image_dir, image_filename)
-    plt.savefig(image_path, bbox_inches='tight', dpi=random.randint(80, 150))
+    save_kwargs = {
+        "bbox_inches": "tight",
+        "dpi": random.randint(80, 150),
+    }
+    if image_ext == "jpg":
+        save_kwargs["format"] = "jpeg"
+        save_kwargs["pil_kwargs"] = {
+            "quality": jpeg_quality,
+            "subsampling": 0,
+            "optimize": True,
+        }
+    plt.savefig(image_path, **save_kwargs)
     plt.close(fig)
     degradation_applied = []
     if random.random() < degrade_fraction:
@@ -2503,16 +2526,30 @@ def _generate_single_worker(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate synthetic scientific plots.")
     parser.add_argument("--output_dir", type=str, default="data", help="Output directory")
-    parser.add_argument("--samples", type=int, default=100, help="Number of samples to generate")
+    parser.add_argument("--samples", type=int, default=1000, help="Number of samples to generate")
     parser.add_argument("--degrade_fraction", type=float, default=0.3,
                         help="Fraction of images to degrade (0.0-1.0). Simulates scans, photocopies, aging.")
     parser.add_argument("--aux_tasks", action="store_true", default=False,
                         help="Emit auxiliary sub-task metadata (axis reading, element counting) for each image.")
     parser.add_argument("--cpus", type=int, default=None,
                         help="Number of parallel workers (default: auto-detect from SLURM/OS affinity)")
+    parser.add_argument("--image_format", type=str, default="jpg", choices=["jpg", "png"],
+                        help="Image format for generated plots. JPEG is faster/smaller for training I/O.")
+    parser.add_argument("--jpeg_quality", type=int, default=95,
+                        help="JPEG quality when --image_format=jpg.")
     args = parser.parse_args()
 
-    generate_plot(args.output_dir, args.samples, args.degrade_fraction, args.aux_tasks, num_cpus=args.cpus)
+    generate_plot(
+        args.output_dir,
+        args.samples,
+        args.degrade_fraction,
+        args.aux_tasks,
+        num_cpus=args.cpus,
+        image_format=args.image_format,
+        jpeg_quality=args.jpeg_quality,
+    )
     suffix = " + aux tasks" if args.aux_tasks else ""
-    print(f"Generated {args.samples} samples ({args.degrade_fraction*100:.0f}% degraded{suffix}) in {args.output_dir}")
-
+    print(
+        f"Generated {args.samples} {args.image_format} samples "
+        f"({args.degrade_fraction*100:.0f}% degraded{suffix}) in {args.output_dir}"
+    )

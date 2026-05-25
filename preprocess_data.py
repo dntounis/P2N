@@ -2,19 +2,19 @@ import os
 import argparse
 import json
 from transformers import DonutProcessor
-from datasets import load_dataset
+from dataset import load_p2n_imagefolder
 
 def main():
     parser = argparse.ArgumentParser(description="Preprocess dataset for P2N training (run on CPU node with many cores)")
     parser.add_argument("--dataset_path", type=str, default="data", help="Path to raw imagefolder dataset")
     parser.add_argument("--output_dir", type=str, default="data_preprocessed", help="Where to save preprocessed Arrow dataset")
-    parser.add_argument("--max_length", type=int, default=768, help="Max decoder sequence length")
+    parser.add_argument("--max_length", type=int, default=512, help="Max decoder sequence length")
     parser.add_argument("--num_proc", type=int, default=None,
                         help="Number of parallel workers (default: auto-detect from OS affinity)")
     parser.add_argument("--test_size", type=float, default=0.1, help="Fraction for eval split")
     args = parser.parse_args()
 
-    num_proc = args.num_proc if args.num_proc else len(os.sched_getaffinity(0))
+    num_proc = args.num_proc if args.num_proc else min(8, len(os.sched_getaffinity(0)))
     print(f"Preprocessing with {num_proc} CPU workers")
 
     model_id = "naver-clova-ix/donut-base"
@@ -61,7 +61,7 @@ def main():
         return {"pixel_values": pixel_values, "labels": labels}
 
     print(f"Loading dataset from {args.dataset_path}...")
-    dataset = load_dataset("imagefolder", data_dir=args.dataset_path)
+    dataset = load_p2n_imagefolder(args.dataset_path)
 
     if "train" in dataset:
         split = dataset["train"].train_test_split(test_size=args.test_size, seed=42)
