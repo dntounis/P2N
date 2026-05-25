@@ -25,14 +25,9 @@ def load_model(model_dir):
     """Load trained model and processor."""
     processor = DonutProcessor.from_pretrained(model_dir)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    
-    # Use accelerate for automatic multi-GPU inference if available
-    try:
-        import accelerate
-        model = VisionEncoderDecoderModel.from_pretrained(model_dir, device_map="auto")
-    except ImportError:
-        model = VisionEncoderDecoderModel.from_pretrained(model_dir)
-        model.to(device)
+
+    model = VisionEncoderDecoderModel.from_pretrained(model_dir)
+    model.to(device)
         
     model.eval()
     return model, processor, device
