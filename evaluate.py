@@ -52,24 +52,29 @@ def run_inference(model, processor, device, image_path, task="p2n", max_length=1
     pixel_values = pixel_values.to(input_device)
     decoder_input_ids = decoder_input_ids.to(input_device)
     
+    end_token_id = processor.tokenizer.convert_tokens_to_ids(end_tok)
+    if end_token_id is None or end_token_id == processor.tokenizer.unk_token_id:
+        end_token_id = processor.tokenizer.eos_token_id
+
     with torch.no_grad():
         outputs = model.generate(
             pixel_values,
             decoder_input_ids=decoder_input_ids,
-            max_length=max_length,
-            early_stopping=True,
+            max_new_tokens=max_length,
             pad_token_id=processor.tokenizer.pad_token_id,
-            eos_token_id=processor.tokenizer.eos_token_id,
+            eos_token_id=end_token_id,
             use_cache=True,
             num_beams=1,
             bad_words_ids=[[processor.tokenizer.unk_token_id]],
             return_dict_in_generate=True,
         )
-    
+
     sequence = processor.batch_decode(outputs.sequences)[0]
     # Clean up special tokens
     sequence = sequence.replace(processor.tokenizer.eos_token, "")
     sequence = sequence.replace(processor.tokenizer.pad_token, "")
+    if processor.tokenizer.bos_token:
+        sequence = sequence.replace(processor.tokenizer.bos_token, "")
     sequence = sequence.replace(start_tok, "").replace(end_tok, "").strip()
     
     return sequence

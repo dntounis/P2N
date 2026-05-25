@@ -33,15 +33,9 @@ def load_model(model_dir):
     processor = DonutProcessor.from_pretrained(model_dir)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
-    # Use accelerate for automatic multi-GPU inference if available
-    try:
-        import accelerate
-        model = VisionEncoderDecoderModel.from_pretrained(model_dir, device_map="auto")
-        print("Model loaded with accelerate (multi-GPU supported).")
-    except ImportError:
-        model = VisionEncoderDecoderModel.from_pretrained(model_dir)
-        model.to(device)
-        print(f"Model loaded on {device} (single device). For multi-GPU, 'pip install accelerate'.")
+    model = VisionEncoderDecoderModel.from_pretrained(model_dir)
+    model.to(device)
+    print(f"Model loaded on {device}.")
         
     model.eval()
     return model, processor, device
@@ -74,24 +68,29 @@ def infer(model, processor, device, image_path, task="p2n", max_length=1536):
     pixel_values = pixel_values.to(input_device)
     decoder_input_ids = decoder_input_ids.to(input_device)
     
+    end_token_id = processor.tokenizer.convert_tokens_to_ids(end_tok)
+    if end_token_id is None or end_token_id == processor.tokenizer.unk_token_id:
+        end_token_id = processor.tokenizer.eos_token_id
+
     with torch.no_grad():
         outputs = model.generate(
             pixel_values,
             decoder_input_ids=decoder_input_ids,
-            max_length=max_length,
-            early_stopping=True,
+            max_new_tokens=max_length,
             pad_token_id=processor.tokenizer.pad_token_id,
-            eos_token_id=processor.tokenizer.eos_token_id,
+            eos_token_id=end_token_id,
             use_cache=True,
             num_beams=1,
             bad_words_ids=[[processor.tokenizer.unk_token_id]],
             return_dict_in_generate=True,
         )
-    
+
     sequence = processor.batch_decode(outputs.sequences)[0]
     # Clean up all special tokens
     sequence = sequence.replace(processor.tokenizer.eos_token, "")
     sequence = sequence.replace(processor.tokenizer.pad_token, "")
+    if processor.tokenizer.bos_token:
+        sequence = sequence.replace(processor.tokenizer.bos_token, "")
     for tok_pair in TASK_TOKENS.values():
         for tok in tok_pair:
             sequence = sequence.replace(tok, "")

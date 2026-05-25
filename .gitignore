@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 data/
+data_sample/
 p2n-model/
 training.log
 .DS_Store

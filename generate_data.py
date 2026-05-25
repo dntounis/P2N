@@ -2244,7 +2244,7 @@ def capture_fig_meta(fig, ax, plot_type_name):
     return meta
 
 
-def generate_plot(output_dir, num_samples, degrade_fraction=0.3, aux_tasks=False):
+def generate_plot(output_dir, num_samples, degrade_fraction=0.3, aux_tasks=False, num_cpus=None):
     global plot_types, multi_panel_types
     os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
     metadata_path = os.path.join(output_dir, "metadata.jsonl")
@@ -2390,7 +2390,7 @@ def generate_plot(output_dir, num_samples, degrade_fraction=0.3, aux_tasks=False
     
     tasks = [(i, output_dir, degrade_fraction, aux_tasks) for i in range(num_samples)]
     
-    num_cores = multiprocessing.cpu_count()
+    num_cores = num_cpus if num_cpus else len(os.sched_getaffinity(0))
     print(f"Generating data using {num_cores} CPU cores in parallel...")
     
     chunk_size = 5 # Strict small chunksize so tqdm updates constantly!
@@ -2508,9 +2508,11 @@ if __name__ == "__main__":
                         help="Fraction of images to degrade (0.0-1.0). Simulates scans, photocopies, aging.")
     parser.add_argument("--aux_tasks", action="store_true", default=False,
                         help="Emit auxiliary sub-task metadata (axis reading, element counting) for each image.")
+    parser.add_argument("--cpus", type=int, default=None,
+                        help="Number of parallel workers (default: auto-detect from SLURM/OS affinity)")
     args = parser.parse_args()
-    
-    generate_plot(args.output_dir, args.samples, args.degrade_fraction, args.aux_tasks)
+
+    generate_plot(args.output_dir, args.samples, args.degrade_fraction, args.aux_tasks, num_cpus=args.cpus)
     suffix = " + aux tasks" if args.aux_tasks else ""
     print(f"Generated {args.samples} samples ({args.degrade_fraction*100:.0f}% degraded{suffix}) in {args.output_dir}")
 

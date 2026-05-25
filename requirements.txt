@@ -1,12 +1,31 @@
-torch
-torchvision
-transformers
-datasets
+# Install PyTorch first with CUDA 12.1 (compatible with driver 535+):
+#   pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
+torch==2.4.1
+torchvision==0.19.1
+
+# HuggingFace ecosystem (pinned for torch 2.4 compatibility)
+transformers==4.44.2
+datasets>=4.8
+tokenizers>=0.19
+huggingface-hub>=0.23
+accelerate>=1.0
+
+# Tokenizer dependencies
+sentencepiece
+protobuf
+
+# Data generation
 matplotlib
 Pillow
-pandas
+numpy
+scipy
 tqdm
+pandas
 scikit-learn
-accelerate
 mplhep
 SciencePlots
+
+# Backend (FastAPI serving)
+fastapi
+uvicorn
+python-multipart

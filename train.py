@@ -1,12 +1,17 @@
+import os
 import argparse
 import json
+import torch
 from transformers import VisionEncoderDecoderModel, DonutProcessor, Seq2SeqTrainer, Seq2SeqTrainingArguments
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 
-def train(dataset_path, output_dir, epochs, max_steps, batch_size, learning_rate, max_length, gradient_accumulation_steps):
+def train(dataset_path, output_dir, epochs, max_steps, batch_size, learning_rate, max_length, gradient_accumulation_steps, preprocessed_path=None):
     # Load model and processor
     model_id = "naver-clova-ix/donut-base"
-    processor = DonutProcessor.from_pretrained(model_id)
+    if preprocessed_path:
+        processor = DonutProcessor.from_pretrained(os.path.join(preprocessed_path, "processor"))
+    else:
+        processor = DonutProcessor.from_pretrained(model_id)
     model = VisionEncoderDecoderModel.from_pretrained(model_id)
 
     # Add special tokens for main task and auxiliary sub-tasks
@@ -23,55 +28,58 @@ def train(dataset_path, output_dir, epochs, max_steps, batch_size, learning_rate
     model.config.decoder_start_token_id = processor.tokenizer.convert_tokens_to_ids(["<s_p2n>"])[0]
     model.config.max_length = max_length
 
-    # Load dataset using HF imagefolder format
-    dataset = load_dataset("imagefolder", data_dir=dataset_path)
-
-    # Train/val split (90/10)
-    if "train" in dataset:
-        split = dataset["train"].train_test_split(test_size=0.1, seed=42)
-        train_dataset = split["train"]
-        eval_dataset = split["test"]
+    if preprocessed_path:
+        print(f"Loading preprocessed dataset from {preprocessed_path}...")
+        train_dataset = load_from_disk(os.path.join(preprocessed_path, "train"))
+        eval_path = os.path.join(preprocessed_path, "eval")
+        eval_dataset = load_from_disk(eval_path) if os.path.exists(eval_path) else None
     else:
-        train_dataset = dataset
-        eval_dataset = None
+        dataset = load_dataset("imagefolder", data_dir=dataset_path)
 
-    def preprocess(example):
-        """Process image and ground truth into model inputs."""
-        image = example["image"].convert("RGB")
-        pixel_values = processor(image, return_tensors="pt").pixel_values.squeeze()
-        
-        # Parse ground truth and select task-specific prompt token
-        gt_text = example.get("ground_truth", "{}")
-        try:
-            gt_parsed = json.loads(gt_text)
-            task = gt_parsed.get("task", "p2n")
-        except (json.JSONDecodeError, TypeError):
-            task = "p2n"
-        
-        task_tokens = {
-            "p2n": ("<s_p2n>", "</s_p2n>"),
-            "axis_info": ("<s_axis_info>", "</s_axis_info>"),
-            "element_count": ("<s_element_count>", "</s_element_count>"),
-        }
-        start_tok, end_tok = task_tokens.get(task, ("<s_p2n>", "</s_p2n>"))
-        target_text = f"{start_tok}{gt_text}{end_tok}"
-        
-        labels = processor.tokenizer(
-            target_text,
-            max_length=max_length,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt"
-        ).input_ids.squeeze()
-        
-        # Replace padding token id with -100 so it's ignored in loss
-        labels[labels == processor.tokenizer.pad_token_id] = -100
-        
-        return {"pixel_values": pixel_values, "labels": labels}
+        if "train" in dataset:
+            split = dataset["train"].train_test_split(test_size=0.1, seed=42)
+            train_dataset = split["train"]
+            eval_dataset = split["test"]
+        else:
+            train_dataset = dataset
+            eval_dataset = None
 
-    train_dataset = train_dataset.map(preprocess, remove_columns=train_dataset.column_names)
-    if eval_dataset:
-        eval_dataset = eval_dataset.map(preprocess, remove_columns=eval_dataset.column_names)
+        def preprocess(example):
+            image = example["image"].convert("RGB")
+            pixel_values = processor(image, return_tensors="pt").pixel_values.squeeze()
+
+            gt_text = example.get("ground_truth", "{}")
+            try:
+                gt_parsed = json.loads(gt_text)
+                task = gt_parsed.get("task", "p2n")
+            except (json.JSONDecodeError, TypeError):
+                task = "p2n"
+
+            task_tokens = {
+                "p2n": ("<s_p2n>", "</s_p2n>"),
+                "axis_info": ("<s_axis_info>", "</s_axis_info>"),
+                "element_count": ("<s_element_count>", "</s_element_count>"),
+            }
+            start_tok, end_tok = task_tokens.get(task, ("<s_p2n>", "</s_p2n>"))
+            target_text = f"{start_tok}{gt_text}{end_tok}"
+
+            labels = processor.tokenizer(
+                target_text,
+                max_length=max_length,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt"
+            ).input_ids.squeeze()
+
+            labels[labels == processor.tokenizer.pad_token_id] = -100
+
+            return {"pixel_values": pixel_values, "labels": labels}
+
+        train_dataset = train_dataset.map(preprocess, remove_columns=train_dataset.column_names,
+                                          writer_batch_size=50)
+        if eval_dataset:
+            eval_dataset = eval_dataset.map(preprocess, remove_columns=eval_dataset.column_names,
+                                            writer_batch_size=50)
 
     train_dataset.set_format("torch")
     if eval_dataset:
@@ -90,6 +98,7 @@ def train(dataset_path, output_dir, epochs, max_steps, batch_size, learning_rate
         warmup_ratio=0.05,
         weight_decay=0.01,
         fp16=True,
+        gradient_checkpointing=True,
         logging_steps=50,
         eval_strategy="steps" if eval_dataset else "no",
         eval_steps=500,
@@ -100,7 +109,7 @@ def train(dataset_path, output_dir, epochs, max_steps, batch_size, learning_rate
         metric_for_best_model="eval_loss" if eval_dataset else None,
         remove_unused_columns=False,
         push_to_hub=False,
-        dataloader_num_workers=4,
+        dataloader_num_workers=0,
         report_to="none",
     )
 
@@ -130,7 +139,9 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=float, default=2e-5, help="Learning rate")
     parser.add_argument("--max_length", type=int, default=1536, help="Max decoder sequence length")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8, help="Gradient accumulation steps")
+    parser.add_argument("--preprocessed_path", type=str, default=None,
+                        help="Path to preprocessed dataset (from preprocess_data.py). Skips on-the-fly preprocessing.")
     args = parser.parse_args()
-    
-    train(args.dataset_path, args.output_dir, args.epochs, args.max_steps, args.batch_size, 
-          args.learning_rate, args.max_length, args.gradient_accumulation_steps)
+
+    train(args.dataset_path, args.output_dir, args.epochs, args.max_steps, args.batch_size,
+          args.learning_rate, args.max_length, args.gradient_accumulation_steps, args.preprocessed_path)
