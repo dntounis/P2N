@@ -36,7 +36,11 @@ from p2n_format import TASK_TOKENS, expand_p2n, parse_prediction, strip_task_tok
 
 def load_model(model_dir, device=None, dtype=None):
     """Load trained model + processor.  The P2N config is attached as ``model.p2n_config``."""
-    processor = DonutProcessor.from_pretrained(model_dir)
+    try:
+        processor = DonutProcessor.from_pretrained(model_dir)
+    except (OSError, ValueError):
+        # Trainer checkpoints (run/checkpoint-N) don't contain the processor; use the run dir's.
+        processor = DonutProcessor.from_pretrained(os.path.dirname(os.path.normpath(model_dir)))
     add_task_tokens(processor)
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     model = VisionEncoderDecoderModel.from_pretrained(model_dir)
@@ -44,7 +48,9 @@ def load_model(model_dir, device=None, dtype=None):
         model = model.to(dtype)
     model.to(device)
     model.eval()
-    model.p2n_config = load_p2n_config(model_dir) if os.path.isdir(model_dir) else {}
+    cfg_dir = model_dir if os.path.exists(os.path.join(model_dir, "p2n_config.json")) \
+        else os.path.dirname(os.path.normpath(model_dir))
+    model.p2n_config = load_p2n_config(cfg_dir) if os.path.isdir(cfg_dir) else {}
     print(f"Model loaded on {device}.")
     return model, processor, device
 

@@ -122,6 +122,12 @@ class GenerationEvalCallback(TrainerCallback):
                                                       self.max_new_tokens)):
                     texts[i] = t
         report = summarize(score_rows(rows, texts))
+        if self.log_path:
+            pred_path = os.path.join(os.path.dirname(self.log_path),
+                                     f"gen_eval_predictions_step{state.global_step}.jsonl")
+            with open(pred_path, "w") as f:
+                for r, t in zip(rows, texts):
+                    f.write(json.dumps({"file_name": r["file_name"], "task": r["task"], "prediction": t}) + "\n")
         if was_training:
             model.train()
 

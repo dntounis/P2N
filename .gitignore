@@ -11,3 +11,5 @@ training.log
 frontend/node_modules/
 *.log
 .pytest_cache/
+p2n-work.bundle
+p2n-patches.tar.gz
