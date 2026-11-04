@@ -46,6 +46,44 @@ from p2n_format import TASK_TOKENS, TARGET_FORMATS
 DEFAULT_MODEL_ID = "naver-clova-ix/donut-base"
 
 
+def token_cross_entropy(logits, labels, num_items_in_batch=None):
+    """Next-token CE where ``labels[t]`` is the target for ``logits[t]`` (no extra shift).
+
+    transformers >= 4.46 routes VisionEncoderDecoderModel's loss through
+    ``ForCausalLMLoss``, which shifts labels by one more position.  With
+    explicit ``decoder_input_ids`` (or the classic shift-right setup) that
+    trains the model to predict the token *after* next: low loss, garbage
+    generation.  Computing the loss here keeps training correct across
+    transformers versions.
+    """
+    loss = torch.nn.functional.cross_entropy(
+        logits.float().reshape(-1, logits.size(-1)), labels.reshape(-1).to(logits.device),
+        ignore_index=-100, reduction="sum")
+    if num_items_in_batch is None:
+        num_items_in_batch = (labels != -100).sum()
+    if torch.is_tensor(num_items_in_batch):
+        num_items_in_batch = num_items_in_batch.to(loss.device)
+    return loss / num_items_in_batch
+
+
+class P2NTrainer(Seq2SeqTrainer):
+    """Seq2SeqTrainer with a version-independent token cross-entropy loss."""
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        labels = inputs.pop("labels")
+        outputs = model(**inputs)
+        # Mirror Trainer's normalisation contract: when the model "accepts loss kwargs"
+        # Trainer expects a loss already normalised by the token count of the whole
+        # accumulated batch; otherwise it divides a per-batch mean by the GA steps.
+        token_normalised = getattr(self, "model_accepts_loss_kwargs", False) and num_items_in_batch is not None
+        loss = token_cross_entropy(outputs.logits, labels, num_items_in_batch if token_normalised else None)
+        if token_normalised and getattr(self.args, "average_tokens_across_devices", False):
+            # Trainer later divides by the number of processes (as in Trainer.compute_loss)
+            loss = loss * (self.accelerator.num_processes if self.args.n_gpu <= 1 else self.args.n_gpu)
+        inputs["labels"] = labels
+        return (loss, outputs) if return_outputs else loss
+
+
 class GenerationEvalCallback(TrainerCallback):
     """Decode a fixed set of validation samples and log task metrics (rank 0 only)."""
 
@@ -215,7 +253,7 @@ def train(args):
     save_p2n_config(args.output_dir, **p2n_cfg)
     processor.save_pretrained(args.output_dir)
 
-    trainer = Seq2SeqTrainer(
+    trainer = P2NTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,

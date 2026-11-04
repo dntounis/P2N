@@ -10,6 +10,10 @@ const DataTable = ({ data }) => {
       if (resultObj?.p2n?.gt_parse?.panels) {
         return resultObj.p2n.gt_parse.panels.flatMap(p => p.data_series || []);
       }
+      // Current inference output: { p2n: { panels: [...] }, axis_info: ..., ... }
+      if (resultObj?.p2n?.panels) {
+        return resultObj.p2n.panels.flatMap(p => p.data_series || []);
+      }
       // If it's the raw format directly
       if (resultObj?.panels) {
         return resultObj.panels.flatMap(p => p.data_series || []);

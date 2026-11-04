@@ -112,3 +112,16 @@ def test_dataset_and_collator(small_dataset):
     # Over-length targets are dropped, not truncated.
     short = P2NDataset(small_dataset, proc, split=None, max_length=8, verbose=False)
     assert len(short) < len(ds)
+
+
+def test_loss_has_no_extra_label_shift():
+    """Regression: transformers' ForCausalLMLoss shifts labels again; our loss must not."""
+    torch = pytest.importorskip("torch")
+    from train import token_cross_entropy
+
+    labels = torch.tensor([[3, 1, 4, 1, -100]])
+    logits = torch.full((1, 5, 6), -20.0)
+    for t, y in enumerate(labels[0].tolist()):
+        if y >= 0:
+            logits[0, t, y] = 20.0  # logits[t] predicts labels[t]
+    assert token_cross_entropy(logits, labels).item() < 1e-6
