@@ -2349,7 +2349,46 @@ def extract_drawn_series(ax, max_series=AUTO_MAX_SERIES):
             added += 1
         if added:
             n_series += 1
+    records.extend(extract_image_grid(ax))
     return records
+
+
+AUTO_GRID = 4  # coarse grid of sampled values for images / meshes
+
+
+def extract_image_grid(ax, n=AUTO_GRID):
+    """Colour range + an n x n grid of cell-centre values for imshow / pcolormesh artists.
+
+    Values in the colour field are readable via the colorbar; a coarse grid
+    gives the model something concrete to read for heatmap-like plots.
+    """
+    from matplotlib.collections import QuadMesh
+
+    out = []
+    artists = list(ax.images) + [c for c in ax.collections if isinstance(c, QuadMesh)]
+    for k, art in enumerate(artists[:1]):
+        arr = np.ma.masked_invalid(np.asarray(art.get_array(), dtype=float))
+        if arr.ndim == 1 and isinstance(art, QuadMesh):
+            try:
+                coords = art.get_coordinates()
+                arr = arr.reshape(coords.shape[0] - 1, coords.shape[1] - 1)
+            except Exception:
+                continue
+        if arr.ndim != 2 or arr.size == 0 or arr.count() == 0:
+            continue
+        vmin, vmax = art.get_clim()
+        out.append({"type": "color_range", "vmin": float(vmin), "vmax": float(vmax)})
+        rows, cols = arr.shape
+        ri = np.linspace(0, rows - 1, min(n, rows)).round().astype(int)
+        ci = np.linspace(0, cols - 1, min(n, cols)).round().astype(int)
+        for a, i in enumerate(ri):
+            for b, j in enumerate(ci):
+                v = arr[i, j]
+                if v is np.ma.masked or not np.isfinite(v):
+                    continue
+                # grid position is reported as fractions of the image (row 0 = first data row)
+                out.append({"type": "grid_value", "row": a, "col": b, "value": float(v)})
+    return out
 
 
 def capture_fig_meta(fig, ax, plot_type_name):

@@ -11,7 +11,7 @@
 
 ### Data quality
 - `tools/audit_generators.py` showed only ~20/131 generators emitted point-level ground truth. ~95 emitted a single summary record, and 42 had constant targets (e.g. `bump_hunt` always peak 125), which can only be memorised.
-- Ground truth is now augmented with **the data actually drawn on the axes** (curves subsampled at 12 points, marker series, small scatters, bars; only points inside the visible limits; errorbar caps excluded). This applies to generators that return fewer than 3 records. Result: **99/131 plot types now have point-level GT**, with mean numeric values per target up from ~11 to ~35. The cap is 64 records per plot.
+- Ground truth is now augmented with **the data actually drawn on the axes** (curves subsampled at 12 points, marker series, small scatters, bars; only points inside the visible limits; errorbar caps excluded). This applies to generators that return fewer than 3 records. Result: **99/131 plot types now have point-level GT** (110/131 after adding colour-range + 4x4 grid values for imshow/pcolormesh plots), with mean numeric values per target up from ~11 to ~35. The cap is 64 records per plot.
 - Every panel records its visible **axis ranges and scales**, which are scored separately (`axes_range_err`, `axes_scale_acc`).
 - Compact columnar target format, lossless, about 2–3× fewer tokens.
 - `--seed` gives byte-identical datasets, and `--plot_types` / `--exclude_plot_types` enable curricula.
@@ -37,7 +37,7 @@ A 7M-parameter model trained from scratch on CPU cannot learn to read values wel
 `scripts/run_pipeline.sh` wraps generate → audit → train → evaluate, and is SLURM-ready.
 
 ## Known gaps / ideas
-- 32 plot types (heatmaps, contours, spectrograms, hexbin, sky maps, vector fields) still have summary-only GT. Readable targets for these would be colorbar range plus a coarse grid of sampled values.
+- 21 plot types (contours, hexbin, vector/stream fields, sky maps, dense scatters, multi-panel types) still have summary-only GT.
 - Dense scatters (> 60 points) are not listed point by point. A density or extent summary may be the right target.
 - There is no real-world test set yet. A few dozen digitised real plots in the same `metadata.jsonl` format would be the most valuable eval addition; `evaluate.py` works on any such folder with `--split all`.
 - Number tokenization in the donut-base sentencepiece vocab is irregular. If numeric accuracy plateaus, try fixed-precision formatting or digit-level tokens.

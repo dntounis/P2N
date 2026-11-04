@@ -125,3 +125,14 @@ def test_loss_has_no_extra_label_shift():
         if y >= 0:
             logits[0, t, y] = 20.0  # logits[t] predicts labels[t]
     assert token_cross_entropy(logits, labels).item() < 1e-6
+
+
+def test_image_grid_extraction():
+    fig, ax = plt.subplots()
+    data = np.arange(16, dtype=float).reshape(4, 4)
+    ax.imshow(data, vmin=0, vmax=15)
+    recs = gd.extract_drawn_series(ax)
+    plt.close(fig)
+    assert recs[0] == {"type": "color_range", "vmin": 0.0, "vmax": 15.0}
+    grid = {(r["row"], r["col"]): r["value"] for r in recs[1:]}
+    assert grid[(0, 0)] == 0.0 and grid[(3, 3)] == 15.0 and len(grid) == 16
