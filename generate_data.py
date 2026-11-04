@@ -1,6 +1,5 @@
 import os
 import io
-import os
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -19,6 +18,8 @@ from tqdm import tqdm
 from scipy.stats import gaussian_kde
 from matplotlib.patches import Ellipse
 from PIL import Image, ImageFilter, ImageEnhance, ImageDraw, ImageFont
+
+from p2n_format import normalize_values
 
 
 def degrade_image(image_path):
@@ -346,8 +347,8 @@ def generate_hep_brazil(fig, ax):
     sigma2_down = expected * 0.3
     observed = expected * random.uniform(0.8, 1.2) + np.random.normal(0, 0.1, len(masses))
     
-    ax.fill_between(masses, sigma2_down, sigma2_up, color='yellow', label='Expected 2$\sigma$')
-    ax.fill_between(masses, sigma1_down, sigma1_up, color='lime', label='Expected 1$\sigma$')
+    ax.fill_between(masses, sigma2_down, sigma2_up, color='yellow', label=r'Expected 2$\sigma$')
+    ax.fill_between(masses, sigma1_down, sigma1_up, color='lime', label=r'Expected 1$\sigma$')
     ax.plot(masses, expected, 'k--', label='Expected')
     if random.random() > 0.3:
         ax.plot(masses, observed, 'k-o', label='Observed')
@@ -416,7 +417,7 @@ def generate_corner_plot(fig, _):
                 ax.plot(x, y, 'r-')
                 ax.set_yticks([])
                 if i == 0:
-                    ax.set_title(f"{names[i]} = {means[i]:.2f} $\pm$ {stds[i]:.2f}")
+                    ax.set_title(rf"{names[i]} = {means[i]:.2f} $\pm$ {stds[i]:.2f}")
             else:
                 # 2D contour
                 x = np.linspace(means[j]-3*stds[j], means[j]+3*stds[j], 50)
@@ -477,8 +478,8 @@ def generate_bump_hunt(fig, ax):
     ax.plot(x, bkg, 'r--', label='Bkg Fit')
     ax.plot(x, bkg + sig, 'r-', label='S+B Fit')
     
-    ax.fill_between(x, bkg*0.9, bkg*1.1, color='yellow', alpha=0.5, label='$\pm 1\sigma$')
-    ax.fill_between(x, bkg*0.8, bkg*1.2, color='green', alpha=0.3, label='$\pm 2\sigma$')
+    ax.fill_between(x, bkg*0.9, bkg*1.1, color='yellow', alpha=0.5, label=r'$\pm 1\sigma$')
+    ax.fill_between(x, bkg*0.8, bkg*1.2, color='green', alpha=0.3, label=r'$\pm 2\sigma$')
     
     # Inset
     axins = ax.inset_axes([0.5, 0.5, 0.4, 0.4])
@@ -2223,6 +2224,173 @@ def extract_element_count(fig_meta):
         "plot_type": fig_meta.get("plot_type", "unknown"),
     }
 
+# ---------------------------------------------------------------------------
+# Automatic ground truth from drawn artists
+# ---------------------------------------------------------------------------
+# Many generators only return a one-record summary (e.g. a peak position or a
+# z-range) that is constant or barely readable from the image.  To give the
+# model something to *read*, we additionally record what is actually drawn on
+# the main axes: curves (subsampled at evenly spaced indices), marker series,
+# small scatters and bars - restricted to points inside the visible limits.
+AUTO_SERIES_MIN_GT_RECORDS = 3   # only augment generators with fewer records
+AUTO_MAX_POINTS_PER_CURVE = 12
+AUTO_MAX_MARKERS = 60
+AUTO_MAX_SERIES = 5
+AUTO_MAX_TOTAL_RECORDS = 64  # keeps targets well inside the decoder budget
+
+
+def _in_view(x, y, xlim, ylim):
+    x0, x1 = sorted(xlim)
+    y0, y1 = sorted(ylim)
+    return np.isfinite(x) & np.isfinite(y) & (x >= x0) & (x <= x1) & (y >= y0) & (y <= y1)
+
+
+def _series_name(artist, default):
+    label = artist.get_label() if hasattr(artist, "get_label") else None
+    if label and not str(label).startswith("_"):
+        return str(label)
+    return default
+
+
+def extract_drawn_series(ax, max_series=AUTO_MAX_SERIES):
+    """Return verbose records describing the data drawn on ``ax`` (data coordinates)."""
+    from matplotlib.collections import PathCollection
+    from matplotlib.container import BarContainer, ErrorbarContainer
+    from matplotlib.lines import Line2D
+
+    xlim, ylim = ax.get_xlim(), ax.get_ylim()
+    records, n_series = [], 0
+
+    # Errorbar data lines are marker series; their cap lines (drawn at y +- err)
+    # are not data and must be skipped.
+    errbar_lines, cap_lines = set(), set()
+    for c in getattr(ax, "containers", []):
+        if isinstance(c, ErrorbarContainer) and c.lines:
+            if c.lines[0] is not None:
+                errbar_lines.add(id(c.lines[0]))
+            for cap in (c.lines[1] or ()):
+                cap_lines.add(id(cap))
+
+    for line in ax.get_lines():
+        if n_series >= max_series:
+            break
+        if (not isinstance(line, Line2D) or not line.get_visible() or id(line) in cap_lines
+                or line.get_transform() != ax.transData):
+            continue
+        try:
+            x = np.asarray(line.get_xdata(), dtype=float)
+            y = np.asarray(line.get_ydata(), dtype=float)
+        except (TypeError, ValueError):
+            continue
+        if x.size < 2 or x.size != y.size:
+            continue
+        mask = _in_view(x, y, xlim, ylim)
+        x, y = x[mask], y[mask]
+        if x.size < 2:
+            continue
+        no_line = line.get_linestyle() in ("None", "none", "", " ")
+        has_marker = line.get_marker() not in (None, "None", "none", "", " ")
+        name = _series_name(line, f"series {n_series + 1}")
+        budget = AUTO_MAX_TOTAL_RECORDS - len(records)
+        if budget < 2:
+            break
+        if (no_line or id(line) in errbar_lines or has_marker) and x.size <= min(AUTO_MAX_MARKERS, budget):
+            idx = np.arange(x.size)
+            rtype = "marker"
+        elif no_line:
+            continue  # dense marker cloud: individual points are not readable
+        else:
+            k = min(AUTO_MAX_POINTS_PER_CURVE, x.size, budget)
+            idx = np.unique(np.linspace(0, x.size - 1, k).round().astype(int))
+            rtype = "curve"
+        for i in idx:
+            records.append({"type": rtype, "series": name, "x": float(x[i]), "y": float(y[i])})
+        n_series += 1
+
+    for coll in ax.collections:
+        if n_series >= max_series:
+            break
+        if not isinstance(coll, PathCollection) or not coll.get_visible():
+            continue
+        if coll.get_offset_transform() != ax.transData:
+            continue
+        off = np.asarray(coll.get_offsets(), dtype=float)
+        if off.ndim != 2 or off.shape[0] == 0:
+            continue
+        mask = _in_view(off[:, 0], off[:, 1], xlim, ylim)
+        off = off[mask]
+        if not 1 <= off.shape[0] <= min(AUTO_MAX_MARKERS, AUTO_MAX_TOTAL_RECORDS - len(records)):
+            continue
+        name = _series_name(coll, f"series {n_series + 1}")
+        for px, py in off:
+            records.append({"type": "marker", "series": name, "x": float(px), "y": float(py)})
+        n_series += 1
+
+    for c in getattr(ax, "containers", []):
+        if n_series >= max_series:
+            break
+        if (not isinstance(c, BarContainer)
+                or len(c.patches) > min(AUTO_MAX_MARKERS, AUTO_MAX_TOTAL_RECORDS - len(records))):
+            continue
+        horizontal = getattr(c, "orientation", "vertical") == "horizontal"
+        name = _series_name(c, f"series {n_series + 1}")
+        added = 0
+        for p in c.patches:
+            if not p.get_visible():
+                continue
+            if horizontal:
+                pos, val = p.get_y() + p.get_height() / 2, p.get_x() + p.get_width()
+            else:
+                pos, val = p.get_x() + p.get_width() / 2, p.get_y() + p.get_height()
+            if not (np.isfinite(pos) and np.isfinite(val)):
+                continue
+            records.append({"type": "hbar" if horizontal else "bar_top", "series": name,
+                            "pos": float(pos), "value": float(val)})
+            added += 1
+        if added:
+            n_series += 1
+    records.extend(extract_image_grid(ax))
+    return records
+
+
+AUTO_GRID = 4  # coarse grid of sampled values for images / meshes
+
+
+def extract_image_grid(ax, n=AUTO_GRID):
+    """Colour range + an n x n grid of cell-centre values for imshow / pcolormesh artists.
+
+    Values in the colour field are readable via the colorbar; a coarse grid
+    gives the model something concrete to read for heatmap-like plots.
+    """
+    from matplotlib.collections import QuadMesh
+
+    out = []
+    artists = list(ax.images) + [c for c in ax.collections if isinstance(c, QuadMesh)]
+    for k, art in enumerate(artists[:1]):
+        arr = np.ma.masked_invalid(np.asarray(art.get_array(), dtype=float))
+        if arr.ndim == 1 and isinstance(art, QuadMesh):
+            try:
+                coords = art.get_coordinates()
+                arr = arr.reshape(coords.shape[0] - 1, coords.shape[1] - 1)
+            except Exception:
+                continue
+        if arr.ndim != 2 or arr.size == 0 or arr.count() == 0:
+            continue
+        vmin, vmax = art.get_clim()
+        out.append({"type": "color_range", "vmin": float(vmin), "vmax": float(vmax)})
+        rows, cols = arr.shape
+        ri = np.linspace(0, rows - 1, min(n, rows)).round().astype(int)
+        ci = np.linspace(0, cols - 1, min(n, cols)).round().astype(int)
+        for a, i in enumerate(ri):
+            for b, j in enumerate(ci):
+                v = arr[i, j]
+                if v is np.ma.masked or not np.isfinite(v):
+                    continue
+                # grid position is reported as fractions of the image (row 0 = first data row)
+                out.append({"type": "grid_value", "row": a, "col": b, "value": float(v)})
+    return out
+
+
 def capture_fig_meta(fig, ax, plot_type_name):
     """Capture axis and element metadata from a rendered figure."""
     meta = {"plot_type": plot_type_name}
@@ -2244,194 +2412,178 @@ def capture_fig_meta(fig, ax, plot_type_name):
     return meta
 
 
-def generate_plot(
-    output_dir,
-    num_samples,
-    degrade_fraction=0.3,
-    aux_tasks=False,
-    num_cpus=None,
-    image_format="jpg",
-    jpeg_quality=95,
-):
-    global plot_types, multi_panel_types
-    os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
-    metadata_path = os.path.join(output_dir, "metadata.jsonl")
-    
-    plot_types = [
-        generate_scatter,
-        generate_fit,
-        generate_clustering,
-        generate_bar,
-        generate_grouped_bar,
-        generate_boxplot,
-        generate_pie,
-        generate_histogram,
-        generate_density,
-        generate_hep_brazil,
-        generate_heatmap,
-        generate_contour,
-        generate_corner_plot,
-        generate_contour_overlay,
-        generate_bump_hunt,
-        generate_stacked_ratio,
-        generate_double_y_axis,
-        generate_multi_line_log,
-        generate_stacked_histogram,
-        generate_residual_bump,
-        generate_ashby_chart,
-        generate_phase_diagram,
-        generate_parity_grid,
-        generate_stress_strain,
-        generate_volcano_plot,
-        generate_roc_curve,
-        generate_light_curve,
-        generate_line_plot,
-        generate_violin_plot,
-        generate_spatial_map,
-        generate_invariant_mass,
-        generate_pt_spectrum,
-        generate_pull_plot,
-        generate_correlation_matrix,
-        generate_unfolded_xsec,
-        generate_efficiency_map,
-        generate_sky_map,
-        generate_sed,
-        generate_hr_diagram,
-        generate_power_spectrum,
-        generate_redshift_distribution,
-        generate_mass_radius,
-        generate_residual_map,
-        generate_band_structure,
-        generate_dos,
-        generate_xrd,
-        generate_raman_spectrum,
-        generate_magnetization,
-        generate_resistivity,
-        generate_nmr_spectrum,
-        generate_mass_spectrum_chem,
-        generate_uv_vis,
-        generate_chromatogram,
-        generate_reaction_coordinate,
-        generate_kinetic_trace,
-        generate_titration_curve,
-        generate_calibration_curve,
-        generate_spectroscopy_2d,
-        generate_clustered_heatmap,
-        generate_manhattan_plot,
-        generate_survival_curve,
-        generate_dose_response,
-        generate_flow_cytometry,
-        generate_forest_plot,
-        generate_epidemic_curve,
-        generate_bland_altman,
-        generate_waterfall_plot,
-        generate_spaghetti_plot,
-        generate_raster_plot,
-        generate_psth,
-        generate_tuning_curve,
-        generate_eeg_traces,
-        generate_spectrogram,
-        generate_connectivity_matrix,
-        generate_psychometric_curve,
-        generate_time_series_anomaly,
-        generate_hovmoller,
-        generate_vertical_profile,
-        generate_climate_ensemble,
-        generate_return_period,
-        generate_ocean_section,
-        generate_vector_field,
-        generate_streamline,
-        generate_lift_drag_polar,
-        generate_pressure_coefficient,
-        generate_bode_plot,
-        generate_nyquist_plot,
-        generate_convergence_plot,
-        generate_pareto_frontier,
-        generate_training_curve,
-        generate_scaling_law,
-        generate_confusion_matrix,
-        generate_ablation_plot,
-        generate_calibration_reliability,
-        generate_attention_heatmap,
-        generate_function_plot,
-        generate_phase_portrait,
-        generate_bifurcation,
-        generate_qq_plot,
-        generate_residual_plot,
-        generate_autocorrelation,
-        generate_trace_plot,
-        generate_coefficient_plot,
-        generate_event_study,
-        generate_lorenz_curve,
-        generate_survey_stacked_bar,
-        generate_economic_timeseries,
-        generate_bubble_chart,
-        generate_radar_chart,
-        generate_sankey_flow,
-        generate_treemap,
-        generate_polar_plot,
-        generate_area_chart,
-        generate_funnel_chart,
-        generate_parallel_coordinates,
-        generate_hexbin_plot,
-        generate_candlestick,
-        generate_ternary_diagram,
-        generate_swarm_plot,
-        generate_pair_plot,
-        generate_step_histogram,
-        generate_ecdf,
-        generate_known_function,
-        generate_dense_scatter,
-        generate_sparse_plot,
-        generate_huge_dynamic_range,
-        generate_notick_plot,
-        generate_extreme_aspect,
-        generate_rotated_labels,
-        generate_broken_axis,
-        generate_3d_bar,
-    ]
-    
-    multi_panel_types = {"bode_plot", "corner_plot", "unfolded_xsec", "invariant_mass", "sky_map", "stacked_ratio", "clustered_heatmap", "parity_grid"}
-    
-    # Define the worker initialization to pass global variables if needed, 
-    # but since it's a Linux fork (usually), globals are inherited. We'll pass explicit args.
-    
-    tasks = [
-        (i, output_dir, degrade_fraction, aux_tasks, image_format, jpeg_quality)
-        for i in range(num_samples)
-    ]
-    
-    num_cores = num_cpus if num_cpus else len(os.sched_getaffinity(0))
-    print(f"Generating data using {num_cores} CPU cores in parallel...")
-    
-    chunk_size = 5 # Strict small chunksize so tqdm updates constantly!
-    
-    with open(metadata_path, 'w') as f:
-        with multiprocessing.Pool(processes=num_cores) as pool:
-            for result_lines in tqdm(pool.imap_unordered(_generate_single_worker, tasks, chunksize=chunk_size), total=num_samples, desc="Generating Complex Data"):
-                for line in result_lines:
-                    f.write(line + "\n")
+# ---------------------------------------------------------------------------
+# Generator registry
+# ---------------------------------------------------------------------------
+PLOT_TYPES = [
+    "scatter",
+    "fit",
+    "clustering",
+    "bar",
+    "grouped_bar",
+    "boxplot",
+    "pie",
+    "histogram",
+    "density",
+    "hep_brazil",
+    "heatmap",
+    "contour",
+    "corner_plot",
+    "contour_overlay",
+    "bump_hunt",
+    "stacked_ratio",
+    "double_y_axis",
+    "multi_line_log",
+    "stacked_histogram",
+    "residual_bump",
+    "ashby_chart",
+    "phase_diagram",
+    "parity_grid",
+    "stress_strain",
+    "volcano_plot",
+    "roc_curve",
+    "light_curve",
+    "line_plot",
+    "violin_plot",
+    "spatial_map",
+    "invariant_mass",
+    "pt_spectrum",
+    "pull_plot",
+    "correlation_matrix",
+    "unfolded_xsec",
+    "efficiency_map",
+    "sky_map",
+    "sed",
+    "hr_diagram",
+    "power_spectrum",
+    "redshift_distribution",
+    "mass_radius",
+    "residual_map",
+    "band_structure",
+    "dos",
+    "xrd",
+    "raman_spectrum",
+    "magnetization",
+    "resistivity",
+    "nmr_spectrum",
+    "mass_spectrum_chem",
+    "uv_vis",
+    "chromatogram",
+    "reaction_coordinate",
+    "kinetic_trace",
+    "titration_curve",
+    "calibration_curve",
+    "spectroscopy_2d",
+    "clustered_heatmap",
+    "manhattan_plot",
+    "survival_curve",
+    "dose_response",
+    "flow_cytometry",
+    "forest_plot",
+    "epidemic_curve",
+    "bland_altman",
+    "waterfall_plot",
+    "spaghetti_plot",
+    "raster_plot",
+    "psth",
+    "tuning_curve",
+    "eeg_traces",
+    "spectrogram",
+    "connectivity_matrix",
+    "psychometric_curve",
+    "time_series_anomaly",
+    "hovmoller",
+    "vertical_profile",
+    "climate_ensemble",
+    "return_period",
+    "ocean_section",
+    "vector_field",
+    "streamline",
+    "lift_drag_polar",
+    "pressure_coefficient",
+    "bode_plot",
+    "nyquist_plot",
+    "convergence_plot",
+    "pareto_frontier",
+    "training_curve",
+    "scaling_law",
+    "confusion_matrix",
+    "ablation_plot",
+    "calibration_reliability",
+    "attention_heatmap",
+    "function_plot",
+    "phase_portrait",
+    "bifurcation",
+    "qq_plot",
+    "residual_plot",
+    "autocorrelation",
+    "trace_plot",
+    "coefficient_plot",
+    "event_study",
+    "lorenz_curve",
+    "survey_stacked_bar",
+    "economic_timeseries",
+    "bubble_chart",
+    "radar_chart",
+    "sankey_flow",
+    "treemap",
+    "polar_plot",
+    "area_chart",
+    "funnel_chart",
+    "parallel_coordinates",
+    "hexbin_plot",
+    "candlestick",
+    "ternary_diagram",
+    "swarm_plot",
+    "pair_plot",
+    "step_histogram",
+    "ecdf",
+    "known_function",
+    "dense_scatter",
+    "sparse_plot",
+    "huge_dynamic_range",
+    "notick_plot",
+    "extreme_aspect",
+    "rotated_labels",
+    "broken_axis",
+    "3d_bar",
+]
 
-def _generate_single_worker(args):
-    i, output_dir, degrade_fraction, aux_tasks, image_format, jpeg_quality = args
-    result_lines = []
-    
-    # Need to set random seed per worker so they don't all generate the same data
-    np.random.seed()
-    random.seed()
-    
-    # Apply a random plot style to diversify training data
-    style_choice = random.choice([
-        'default', 'default', 'default',  # weight default more
-        'ggplot', 'bmh', 'classic', 'fivethirtyeight',
-        'seaborn-v0_8-darkgrid', 'seaborn-v0_8-whitegrid', 'seaborn-v0_8-ticks',
-        'science_default', 'science_ieee', 'science_nature', 'science_scatter',
-        'hep_cms', 'hep_atlas', 'hep_alice', 'hep_lhcb'
-    ])
-    
-    plt.style.use('default') # reset first
+MULTI_PANEL_TYPES = {"bode_plot", "corner_plot", "unfolded_xsec", "invariant_mass", "sky_map", "stacked_ratio", "clustered_heatmap", "parity_grid"}
+
+STYLE_CHOICES = [
+    'default', 'default', 'default',  # weight default more
+    'ggplot', 'bmh', 'classic', 'fivethirtyeight',
+    'seaborn-v0_8-darkgrid', 'seaborn-v0_8-whitegrid', 'seaborn-v0_8-ticks',
+    'science_default', 'science_ieee', 'science_nature', 'science_scatter',
+    'hep_cms', 'hep_atlas', 'hep_alice', 'hep_lhcb'
+]
+
+
+def get_generator(plot_type_name):
+    return globals()[f"generate_{plot_type_name}"]
+
+
+def resolve_plot_types(include=None, exclude=None):
+    """Validate and filter the list of plot types to generate."""
+    types = list(PLOT_TYPES)
+    if include:
+        unknown = sorted(set(include) - set(PLOT_TYPES))
+        if unknown:
+            raise ValueError(f"Unknown plot types: {unknown}")
+        types = [t for t in types if t in set(include)]
+    if exclude:
+        types = [t for t in types if t not in set(exclude)]
+    if not types:
+        raise ValueError("No plot types left after filtering")
+    return types
+
+
+def apply_random_style():
+    style_choice = random.choice(STYLE_CHOICES)
+    plt.style.use('default')  # reset first
     if style_choice.startswith('science_'):
-        import scienceplots
+        import scienceplots  # noqa: F401  (registers styles)
         substyle = style_choice.split('_')[1]
         if substyle == 'default':
             plt.style.use(['science', 'no-latex'])
@@ -2446,24 +2598,125 @@ def _generate_single_worker(args):
         elif exp == 'LHCB': hep.style.use(hep.style.LHCb)
     elif style_choice != 'default':
         plt.style.use(style_choice)
-        
     plt.rcParams['legend.loc'] = random.choice(['upper left', 'upper right', 'lower left', 'lower right'])
-    
-    fig, ax = plt.subplots(figsize=(random.uniform(6.0, 9.0), random.uniform(6.0, 9.0)))
-    generator = random.choice(plot_types)
-    plot_type_name = generator.__name__.replace('generate_', '')
-    
-    try:
-        data_points = generator(fig, ax)
+    return style_choice
 
-    except Exception as e:
-        plt.close(fig)
-        return []
+
+def capture_axes_info(ax):
+    """Visible axis ranges/scales of the main axes (readable from the tick labels)."""
     try:
-        main_ax = fig.axes[0] if fig.axes else ax
-        fig_meta = capture_fig_meta(fig, main_ax, plot_type_name)
+        x0, x1 = ax.get_xlim()
+        y0, y1 = ax.get_ylim()
+        return {
+            "x_range": [float(x0), float(x1)],
+            "y_range": [float(y0), float(y1)],
+            "x_scale": ax.get_xscale(),
+            "y_scale": ax.get_yscale(),
+        }
     except Exception:
-        fig_meta = {"plot_type": plot_type_name}
+        return None
+
+
+def render_sample(plot_type_name, figsize=None, auto_series=True):
+    """Render one plot of ``plot_type_name``.  Returns ``(fig, data_points, fig_meta, axes_info)``.
+
+    With ``auto_series`` the generator's ground truth is augmented with the
+    data actually drawn on the main axes when the generator itself returns
+    fewer than ``AUTO_SERIES_MIN_GT_RECORDS`` records (see
+    :func:`extract_drawn_series`).
+
+    Raises whatever the generator raises; the caller is responsible for
+    closing ``fig`` on success.
+    """
+    apply_random_style()
+    if figsize is None:
+        figsize = (random.uniform(6.0, 9.0), random.uniform(6.0, 9.0))
+    fig, ax = plt.subplots(figsize=figsize)
+    try:
+        data_points = get_generator(plot_type_name)(fig, ax)
+        main_ax = fig.axes[0] if fig.axes else ax
+        try:
+            fig_meta = capture_fig_meta(fig, main_ax, plot_type_name)
+        except Exception:
+            fig_meta = {"plot_type": plot_type_name}
+        axes_info = None if plot_type_name in MULTI_PANEL_TYPES else capture_axes_info(main_ax)
+        if (auto_series and plot_type_name not in MULTI_PANEL_TYPES and isinstance(data_points, list)
+                and len(data_points) < AUTO_SERIES_MIN_GT_RECORDS):
+            try:
+                data_points = list(data_points) + extract_drawn_series(main_ax)
+            except Exception:
+                pass
+    except Exception:
+        plt.close(fig)
+        raise
+    return fig, normalize_values(data_points), fig_meta, axes_info
+
+
+def generate_plot(
+    output_dir,
+    num_samples,
+    degrade_fraction=0.3,
+    aux_tasks=False,
+    num_cpus=None,
+    image_format="jpg",
+    jpeg_quality=95,
+    seed=None,
+    plot_types=None,
+    exclude_plot_types=None,
+    start_index=0,
+    auto_series=True,
+):
+    os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
+    metadata_path = os.path.join(output_dir, "metadata.jsonl")
+    active_types = resolve_plot_types(plot_types, exclude_plot_types)
+
+    tasks = [
+        (i, output_dir, degrade_fraction, aux_tasks, image_format, jpeg_quality, seed, active_types, auto_series)
+        for i in range(start_index, start_index + num_samples)
+    ]
+
+    num_cores = num_cpus if num_cpus else len(os.sched_getaffinity(0))
+    print(f"Generating {num_samples} samples over {len(active_types)} plot types "
+          f"using {num_cores} CPU cores...")
+
+    chunk_size = 5  # small chunksize so tqdm updates constantly
+    failures = {}
+    n_ok = 0
+    mode = 'a' if start_index > 0 else 'w'
+    with open(metadata_path, mode) as f:
+        with multiprocessing.Pool(processes=num_cores) as pool:
+            for result_lines, failure in tqdm(pool.imap_unordered(_generate_single_worker, tasks, chunksize=chunk_size),
+                                              total=num_samples, desc="Generating Complex Data"):
+                for line in result_lines:
+                    f.write(line + "\n")
+                if failure:
+                    failures[failure[0]] = failures.get(failure[0], 0) + 1
+                elif result_lines:
+                    n_ok += 1
+    if failures:
+        print(f"WARNING: {sum(failures.values())} samples failed and were skipped: "
+              + ", ".join(f"{k}x{v}" for k, v in sorted(failures.items(), key=lambda kv: -kv[1])))
+    return n_ok, failures
+
+
+def _generate_single_worker(args):
+    i, output_dir, degrade_fraction, aux_tasks, image_format, jpeg_quality, seed, active_types, auto_series = args
+    result_lines = []
+
+    # Seed per sample: reproducible when --seed is given, fresh entropy otherwise.
+    if seed is None:
+        np.random.seed()
+        random.seed()
+    else:
+        random.seed(seed * 1_000_003 + i)
+        np.random.seed((seed * 1_000_003 + i) % (2**32))
+
+    plot_type_name = random.choice(active_types)
+    try:
+        fig, data_points, fig_meta, axes_info = render_sample(plot_type_name, auto_series=auto_series)
+    except Exception as e:
+        return [], (plot_type_name, repr(e))
+
     image_dir = os.path.join(output_dir, "images", plot_type_name)
     os.makedirs(image_dir, exist_ok=True)
     image_ext = "jpg" if image_format in ("jpg", "jpeg") else "png"
@@ -2480,7 +2733,11 @@ def _generate_single_worker(args):
             "subsampling": 0,
             "optimize": True,
         }
-    plt.savefig(image_path, **save_kwargs)
+    try:
+        fig.savefig(image_path, **save_kwargs)
+    except Exception as e:
+        plt.close(fig)
+        return [], (plot_type_name, repr(e))
     plt.close(fig)
     degradation_applied = []
     if random.random() < degrade_fraction:
@@ -2488,17 +2745,18 @@ def _generate_single_worker(args):
             degradation_applied = degrade_image(image_path)
         except Exception:
             pass
+    panel = {
+        "panel_id": "A",
+        "plot_type": plot_type_name,
+    }
+    if axes_info:
+        panel["axes"] = normalize_values(axes_info)
+    panel["data_series"] = data_points
     structured_gt = {
-        "figure_type": "multi_panel" if plot_type_name in multi_panel_types else "single_panel",
+        "figure_type": "multi_panel" if plot_type_name in MULTI_PANEL_TYPES else "single_panel",
         "image_quality": "degraded" if degradation_applied else "clean",
         "degradation_effects": degradation_applied,
-        "panels": [
-            {
-                "panel_id": "A",
-                "plot_type": plot_type_name,
-                "data_series": data_points
-            }
-        ]
+        "panels": [panel],
     }
     ground_truth = {"gt_parse": structured_gt, "task": "p2n"}
     metadata_entry = {
@@ -2521,7 +2779,7 @@ def _generate_single_worker(args):
                 "ground_truth": json.dumps({"gt_parse": elem_info, "task": "element_count"})
             }
             result_lines.append(json.dumps(aux_entry))
-    return result_lines
+    return result_lines, None
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate synthetic scientific plots.")
@@ -2537,7 +2795,22 @@ if __name__ == "__main__":
                         help="Image format for generated plots. JPEG is faster/smaller for training I/O.")
     parser.add_argument("--jpeg_quality", type=int, default=95,
                         help="JPEG quality when --image_format=jpg.")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Base random seed. Sample i uses a seed derived from (seed, i), so datasets are reproducible.")
+    parser.add_argument("--plot_types", type=str, nargs="+", default=None,
+                        help="Only generate these plot types (names without the generate_ prefix).")
+    parser.add_argument("--exclude_plot_types", type=str, nargs="+", default=None,
+                        help="Plot types to skip.")
+    parser.add_argument("--start_index", type=int, default=0,
+                        help="Index of the first sample; >0 appends to an existing metadata.jsonl.")
+    parser.add_argument("--no_auto_series", action="store_true",
+                        help="Do not augment low-information ground truth with the data drawn on the axes.")
+    parser.add_argument("--list_plot_types", action="store_true", help="Print available plot types and exit.")
     args = parser.parse_args()
+
+    if args.list_plot_types:
+        print("\n".join(PLOT_TYPES))
+        raise SystemExit(0)
 
     generate_plot(
         args.output_dir,
@@ -2547,6 +2820,11 @@ if __name__ == "__main__":
         num_cpus=args.cpus,
         image_format=args.image_format,
         jpeg_quality=args.jpeg_quality,
+        seed=args.seed,
+        plot_types=args.plot_types,
+        exclude_plot_types=args.exclude_plot_types,
+        start_index=args.start_index,
+        auto_series=not args.no_auto_series,
     )
     suffix = " + aux tasks" if args.aux_tasks else ""
     print(
