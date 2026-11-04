@@ -1,9 +1,13 @@
 __pycache__/
 *.pyc
 data/
-data_sample/
+data_*/
 p2n-model/
+smoke-*/
+tiny-donut/
+eval_out/
 training.log
 .DS_Store
 frontend/node_modules/
 *.log
+.pytest_cache/
